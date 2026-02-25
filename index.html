@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ChemCost v49</title>
+  <title>ChemCost v51</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <!-- reactflow CSS (unpkg; cdnjs does not carry this package -- do not migrate) -->
   <link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css" />
@@ -18,34 +18,6 @@
 // === SmilesDrawer (CC-042): inline library ===
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module){"use strict";var _Mathmin=Math.min,_Mathmax=Math.max;const Drawer=require("./src/Drawer"),Parser=require("./src/Parser"),ReactionParser=require("./src/ReactionParser"),SvgDrawer=require("./src/SvgDrawer"),ReactionDrawer=require("./src/ReactionDrawer"),SmiDrawer=require("./src/SmilesDrawer"),GaussDrawer=require("./src/GaussDrawer");var canUseDOM=!!("undefined"!=typeof window&&window.document&&window.document.createElement),SmilesDrawer={Version:"1.0.0"};SmilesDrawer.Drawer=Drawer,SmilesDrawer.Parser=Parser,SmilesDrawer.SvgDrawer=SvgDrawer,SmilesDrawer.ReactionDrawer=ReactionDrawer,SmilesDrawer.ReactionParser=ReactionParser,SmilesDrawer.GaussDrawer=GaussDrawer,SmilesDrawer.clean=function(smiles){return smiles.replace(/[^A-Za-z0-9@\.\+\-\?!\(\)\[\]\{\}/\\=#\$:\*]/g,"")},SmilesDrawer.apply=function(options,selector="canvas[data-smiles]",themeName="light",onError=null){let smilesDrawer=new Drawer(options),elements=document.querySelectorAll(selector);for(var i=0;i<elements.length;i++){let element=elements[i];SmilesDrawer.parse(element.getAttribute("data-smiles"),function(tree){smilesDrawer.draw(tree,element,themeName,!1)},function(err){onError&&onError(err)})}},SmilesDrawer.parse=function(smiles,successCallback,errorCallback){try{successCallback&&successCallback(Parser.parse(smiles))}catch(err){errorCallback&&errorCallback(err)}},SmilesDrawer.parseReaction=function(reactionSmiles,successCallback,errorCallback){try{successCallback&&successCallback(ReactionParser.parse(reactionSmiles))}catch(err){errorCallback&&errorCallback(err)}},canUseDOM&&(window.SmilesDrawer=SmilesDrawer,window.SmiDrawer=SmiDrawer),SmilesDrawer.SmiDrawer=SmiDrawer,Array.prototype.fill||Object.defineProperty(Array.prototype,"fill",{value:function(value){if(null==this)throw new TypeError("this is null or not defined");for(var O=Object(this),len=O.length>>>0,start=arguments[1],relativeStart=start>>0,k=0>relativeStart?_Mathmax(len+relativeStart,0):_Mathmin(relativeStart,len),end=arguments[2],relativeEnd=void 0===end?len:end>>0,final=0>relativeEnd?_Mathmax(len+relativeEnd,0):_Mathmin(relativeEnd,len);k<final;)O[k]=value,k++;return O}}),module.exports=SmilesDrawer},{"./src/Drawer":6,"./src/GaussDrawer":10,"./src/Parser":15,"./src/ReactionDrawer":18,"./src/ReactionParser":19,"./src/SmilesDrawer":23,"./src/SvgDrawer":24}],2:[function(require,module,exports){var _NumberMAX_VALUE=Number.MAX_VALUE,_Mathsin=Math.sin,_Mathatan=Math.atan2,_Mathpow=Math.pow,_Mathcos=Math.cos,_Mathsqrt=Math.sqrt,_Mathfloor=Math.floor,_Mathround=Math.round,_MathPI=Math.PI,_Mathabs=Math.abs,_Mathmin2=Math.min,_Mathmax2=Math.max;/**
  * chroma.js - JavaScript library for color conversions
- *
- * Copyright (c) 2011-2019, Gregor Aisch
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. The name Gregor Aisch may not be used to endorse or promote products
- * derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL GREGOR AISCH OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
- * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
  * -------------------------------------------------------
  *
  * chroma.js includes colors from colorbrewer2.org, which are released under
@@ -114,21 +86,23 @@
     const { useState, useCallback, useEffect, useRef, createContext, useContext, useMemo } = React;
 
 
-// ---- data_v49.js ----
+// ---- data_v51.js ----
 
 // =============================================================================
-// === data.js -- v49: Static configuration and Icon component =================
+// === data.js -- v51: Static configuration and Icon component =================
 // =============================================================================
 // This file contains:
 //   - Schema version and constants
 //   - All static type/enum arrays (OPERATION_TYPES, BUILTIN_EQUIPMENT, etc.)
+//   - BUILTIN_CONSUMABLES (new v51: single-use packaging containers)
+//   - ORG_COST_RATES (new v51: fixed unit rates for R&D/QC/QA/PRD org costs)
 //   - The Icon component (v46: uses Google Material Symbols font; no inline SVG)
 //
 // Build order: data.js -> models.js -> ui.js  (tests.js is dev-only, never built)
-// v49: no content changes (version bump only; audit in v49 changed other files).
+// v51: added BUILTIN_CONSUMABLES, ORG_COST_RATES; bumped SCHEMA_VERSION to 1.8.0.
 // =============================================================================
 
-const SCHEMA_VERSION = "1.7.0"; // Project data format marker for load/migration checks
+const SCHEMA_VERSION = "1.8.0"; // Bumped v51: project gains consumables array + operation.consumableId + orgCosts
 
 const DEFAULT_PUMP_RATE = 10; // L/h -- fallback when op.pumpRate is null (CC-016)
 
@@ -218,6 +192,61 @@ const BUILTIN_EQUIPMENT = [
   { id: "DU-201", name: "DU-201", type: "distillation_unit", moc: "Glass", minWorkingVolume: null, maxWorkingVolume: 200, hourlyRate: 75 },
 ];
 
+// === BUILTIN_CONSUMABLES (v51) ===============================================
+// Default single-use packaging containers loaded into every project on migration.
+// Users may edit capacityKg and unitCost to match their procurement prices.
+// Built-in consumables cannot be deleted (same policy as BUILTIN_EQUIPMENT).
+const BUILTIN_CONSUMABLES = [
+  { id: "CON-B01", name: "Fiber Drum with Double PE Liner", capacityKg: 200, unitCost: 25, notes: "" },
+  { id: "CON-B02", name: "HDPE Drum with Double PE Liner",  capacityKg: 200, unitCost: 35, notes: "" },
+  { id: "CON-B03", name: "55-gallon Steel Drum",            capacityKg: 200, unitCost: 20, notes: "" },
+  { id: "CON-B04", name: "30-gallon HDPE Drum",             capacityKg: 110, unitCost: 18, notes: "" },
+  { id: "CON-B05", name: "Standard IBC Tote",               capacityKg: 1000, unitCost: 150, notes: "" },
+];
+
+// === ORG_COST_RATES (v51) ====================================================
+// Fixed institutional unit rates for organizational cost categories.
+// Users enter quantities; the rate is fixed by institutional standard.
+// Per-step auto quantities derive from project.steps.length at compute time.
+const ORG_COST_RATES = {
+  rd: {
+    processDevelopmentPerWeek:  3750,
+    rmSuppliesPerStep:          1000,
+    batchRecordReviewPerStep:   750,
+    processSupportPerHour:      93.75,
+    developmentReportEach:      3750,
+  },
+  qc: {
+    ftePerHour:                 87.50,
+    methodTransferEach:         7500,
+    rmIntermediateReleaseEach:  1500,
+    methodValidationEach:       15000,
+    productReleaseEach:         3000,
+    stabilityTestPointEach:     3000,
+    stabilityStorageEach:       40000,
+    suppliesColumnsPerStep:     1000,
+    externalLabValidationEach:  12000,
+    externalLabTestingEach:     3500,
+    externalLabQualificationEach: 7500,
+  },
+  qa: {
+    reviewMethodTransferEach:           700,
+    reviewSpecificationsEach:           262.50,
+    reviewAnalyticalDocumentationEach:  1400,
+    reviewNewMasterBatchRecordEach:     350,
+    reviewTestMethodsEach:              262.50,
+    reviewCleaningMethodValidationEach: 350,
+    reviewExecutedBatchRecordEach:      700,
+    reviewAnalyticalReleasePaperworkEach: 175,
+    authorPVProtocolAndReportEach:      2800,
+    reviewFPMethodValidationEach:       1050,
+    newSupplierQualificationEach:       875,
+  },
+  prd: {
+    batchRecordWritingPerStep: 2000,
+  },
+};
+
 // === ICON COMPONENT (v45) ====================================================
 // v45: Replaced inline SVG paths with Google Material Symbols font glyphs.
 // The font is loaded via CDN link tag in the HTML wrapper (build.py).
@@ -278,10 +307,10 @@ function Icon({ name, size = 14, color }) {
 }
 
 
-// ---- models_v49.js ----
+// ---- models_v51.js ----
 
 // =============================================================================
-// === models.js -- v49: Core math, engines, and state management ==============
+// === models.js -- v51: Core math, engines, and state management ==============
 // =============================================================================
 // Depends on: data.js (constants must be loaded first)
 // This file contains:
@@ -322,6 +351,47 @@ function makeLaborRates() {
   ];
 }
 
+// makeOrgCosts: default zero-valued org cost quantities for R&D, QC, QA, PRD sections.
+// All quantities default to 0 so the Org Costs tab is immediately functional.
+// developmentReportIncluded defaults to false (checkbox row).
+function makeOrgCosts() {
+  return {
+    rd: {
+      processDevelopmentWeeks: 0,
+      processSupportHours: 0,
+      developmentReportIncluded: false,
+    },
+    qc: {
+      fteHours: 0,
+      methodTransfers: 0,
+      rmIntermediateReleases: 0,
+      methodValidations: 0,
+      productReleases: 0,
+      stabilityTestPoints: 0,
+      stabilityStorage: 0,
+      externalLabValidations: 0,
+      externalLabTestingBatches: 0,
+      externalLabQualification: 0,
+    },
+    qa: {
+      reviewMethodTransfer: 0,
+      reviewSpecifications: 0,
+      reviewAnalyticalDocumentation: 0,
+      reviewNewMasterBatchRecord: 0,
+      reviewTestMethods: 0,
+      reviewCleaningMethodValidation: 0,
+      reviewExecutedBatchRecord: 0,
+      reviewAnalyticalReleasePaperwork: 0,
+      authorPVProtocolAndReport: 0,
+      reviewFPMethodValidation: 0,
+      newSupplierQualification: 0,
+    },
+    prd: {
+      ppeCostPerHour: 10,
+    },
+  };
+}
+
 function makeEmptyProject() {
   return {
     id: crypto.randomUUID(), name: "New Project", schemaVersion: SCHEMA_VERSION,
@@ -329,12 +399,14 @@ function makeEmptyProject() {
     notes: "",                           // CC-025: free-text project notes
     compounds: [], materials: [],
     equipment: BUILTIN_EQUIPMENT.map(e => ({ ...e })),
+    consumables: BUILTIN_CONSUMABLES.map(c => ({ ...c })), // v51: single-use packaging containers
     steps: [], operations: [], compositeOperations: [],
     batchSizingConfig: {
       mode: "target_output", targetMass: null, targetUnit: "kg",
       stepOverrides: {}, allowExcessIntermediate: false,
     },
     laborRates: makeLaborRates(), settings: makeSettings(),
+    orgCosts: makeOrgCosts(), // v51: organizational cost quantities (R&D/QC/QA/PRD)
   };
 }
 
@@ -806,30 +878,86 @@ function computeStoichSuggestedKg({ limitingOp, limitingMaterial, targetMaterial
 // The local JSON lookup DB (handled in UI) remains the density source.
 // =============================================================================
 
+// fetchCompoundFromChEMBL(query) -- Phase 2 compound lookup via ChEMBL REST API.
+//
+// DESIGN NOTE: The former text-search endpoint (/molecule/search?q=) was removed
+// because it returns fuzzy/relevance-ranked results -- not exact name matches.
+// For a query like "2,6-dichloropyrazine", it returned the top fuzzy match which
+// could be a structurally different compound. The returned SMILES was valid but
+// wrong, and SmilesDrawer drew the wrong structure silently (no parse error).
+//
+// This function now uses two exact-match endpoints in sequence:
+//   Phase A: pref_name__iexact -- matches ChEMBL preferred names exactly (case-insensitive)
+//   Phase B: molecule_synonym?synonym__iexact -- matches synonyms/trade names exactly,
+//            then fetches the full molecule record by chembl_id
+//
+// If both phases return empty, returns null (CIR phase 3 then runs as before).
+//
+// SMILES validation: after either phase succeeds, the returned smiles string is
+// checked: must be a non-empty printable ASCII string with no "InChI" substring.
+// ChEMBL occasionally stores InChI strings in the smiles field for legacy entries;
+// SmilesDrawer cannot parse InChI, so we blank those out rather than store garbage.
 async function fetchCompoundFromChEMBL(query) {
   if (!query || typeof query !== "string" || !query.trim()) return null;
   const q = query.trim();
-  const url = `https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=${encodeURIComponent(q)}`;
-  try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    // A non-OK status (e.g. 404) means no results; let other errors propagate so
-    // the UI can distinguish "not found" from a genuine network/CORS failure.
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.molecules || data.molecules.length === 0) return null;
-    const mol = data.molecules[0];
+  const BASE = "https://www.ebi.ac.uk/chembl/api/data";
+  const headers = { Accept: "application/json" };
+
+  // Validate and sanitise a SMILES string before returning it.
+  // Returns "" if the string is not safe for SmilesDrawer.
+  const validateSmiles = (raw) => {
+    if (!raw || typeof raw !== "string") return "";
+    const s = raw.trim();
+    // Must be non-empty printable ASCII only (no high-byte or control chars)
+    if (!/^[\x20-\x7E]+$/.test(s)) return "";
+    // ChEMBL legacy entries sometimes store InChI strings here; SmilesDrawer cannot parse them.
+    if (s.includes("InChI")) return "";
+    return s;
+  };
+
+  // Extract the standard result shape from a ChEMBL MoleculeObject.
+  const extractMol = (mol) => {
+    if (!mol) return null;
     const props = mol.molecule_properties;
     const structs = mol.molecule_structures;
     return {
       title: mol.pref_name || q,
       molecularWeight: props ? parseFloat(props.full_mwt) || null : null,
-      smiles: structs ? (structs.canonical_smiles || "") : "",
-      // ChEMBL canonical_smiles is standard Canonical SMILES, fully compatible with SmilesDrawer.
-      // Maps directly to CompoundObject.symbol without any post-processing.
+      smiles: validateSmiles(structs ? (structs.canonical_smiles || "") : ""),
       density: null, // ChEMBL does not provide reliable density data
     };
+  };
+
+  try {
+    // Phase A: exact preferred name match (pref_name__iexact)
+    const resA = await fetch(`${BASE}/molecule?pref_name__iexact=${encodeURIComponent(q)}&format=json&limit=1`, { headers });
+    if (resA.ok) {
+      const dataA = await resA.json();
+      if (dataA.molecules && dataA.molecules.length > 0) {
+        return extractMol(dataA.molecules[0]);
+      }
+    }
+
+    // Phase B: synonym exact match, then fetch full molecule by chembl_id
+    const resB = await fetch(`${BASE}/molecule_synonym?synonym__iexact=${encodeURIComponent(q)}&format=json&limit=1`, { headers });
+    if (resB.ok) {
+      const dataB = await resB.json();
+      if (dataB.molecule_synonyms && dataB.molecule_synonyms.length > 0) {
+        const chemblId = dataB.molecule_synonyms[0].molecule_chembl_id;
+        if (chemblId) {
+          const resC = await fetch(`${BASE}/molecule/${encodeURIComponent(chemblId)}?format=json`, { headers });
+          if (resC.ok) {
+            const mol = await resC.json();
+            return extractMol(mol);
+          }
+        }
+      }
+    }
+
+    // Both phases returned empty -- let CIR phase 3 run
+    return null;
   } catch (err) {
-    // Let the caller handle the error (UI will set status to "error")
+    // Re-throw so the caller's .catch() sets lookup status to "error"
     throw err;
   }
 }
@@ -970,6 +1098,23 @@ function migrateProject(rawProject) {
       }
       return normalized;
     })(),
+    consumables: (() => {
+      // v51: normalize each stored consumable; ensure all BUILTIN_CONSUMABLES are present.
+      // Pattern mirrors the equipment migration above.
+      const raw = Array.isArray(base.consumables) ? base.consumables : [];
+      const normalized = raw.map(c => ({
+        id: typeof c?.id === "string" ? c.id : genId("CON"),
+        name: typeof c?.name === "string" ? c.name : "",
+        capacityKg: normalizePositiveNumber(c?.capacityKg, null),
+        unitCost: normalizePositiveNumber(c?.unitCost, null),
+        notes: typeof c?.notes === "string" ? c.notes : "",
+      }));
+      const loadedIds = new Set(normalized.map(c => c.id));
+      for (const b of BUILTIN_CONSUMABLES) {
+        if (!loadedIds.has(b.id)) normalized.push({ ...b });
+      }
+      return normalized;
+    })(),
     steps: Array.isArray(base.steps) ? base.steps.map((s, idx) => ({
       ...s,
       id: typeof s?.id === "string" ? s.id : genId("STP"),
@@ -1038,6 +1183,8 @@ function migrateProject(rawProject) {
         if (normalized.type === "packaging") {
           const stored = normalizePositiveNumber(o?.packagingRateKgPerH, null);
           normalized.packagingRateKgPerH = stored ?? legacyPkgRate ?? null;
+          // v51: consumableId links a packaging op to a consumable container
+          normalized.consumableId = typeof o?.consumableId === "string" ? o.consumableId : null;
         }
         return normalized;
       });
@@ -1045,6 +1192,50 @@ function migrateProject(rawProject) {
     batchSizingConfig: normalizeBatchSizingConfig(base.batchSizingConfig),
     laborRates: normalizeLaborRates(base.laborRates),
     settings: normalizeSettings(base.settings),
+    orgCosts: (() => {
+      // v51: normalize orgCosts; seed any missing sub-section from makeOrgCosts() defaults.
+      const defaults = makeOrgCosts();
+      const src = (base.orgCosts && typeof base.orgCosts === "object") ? base.orgCosts : {};
+      const rdSrc = src.rd || {};
+      const qcSrc = src.qc || {};
+      const qaSrc = src.qa || {};
+      const prdSrc = src.prd || {};
+      return {
+        rd: {
+          processDevelopmentWeeks: normalizeNumber(rdSrc.processDevelopmentWeeks, 0),
+          processSupportHours: normalizeNumber(rdSrc.processSupportHours, 0),
+          developmentReportIncluded: !!rdSrc.developmentReportIncluded,
+        },
+        qc: {
+          fteHours: normalizeNumber(qcSrc.fteHours, 0),
+          methodTransfers: normalizeNumber(qcSrc.methodTransfers, 0),
+          rmIntermediateReleases: normalizeNumber(qcSrc.rmIntermediateReleases, 0),
+          methodValidations: normalizeNumber(qcSrc.methodValidations, 0),
+          productReleases: normalizeNumber(qcSrc.productReleases, 0),
+          stabilityTestPoints: normalizeNumber(qcSrc.stabilityTestPoints, 0),
+          stabilityStorage: normalizeNumber(qcSrc.stabilityStorage, 0),
+          externalLabValidations: normalizeNumber(qcSrc.externalLabValidations, 0),
+          externalLabTestingBatches: normalizeNumber(qcSrc.externalLabTestingBatches, 0),
+          externalLabQualification: normalizeNumber(qcSrc.externalLabQualification, 0),
+        },
+        qa: {
+          reviewMethodTransfer: normalizeNumber(qaSrc.reviewMethodTransfer, 0),
+          reviewSpecifications: normalizeNumber(qaSrc.reviewSpecifications, 0),
+          reviewAnalyticalDocumentation: normalizeNumber(qaSrc.reviewAnalyticalDocumentation, 0),
+          reviewNewMasterBatchRecord: normalizeNumber(qaSrc.reviewNewMasterBatchRecord, 0),
+          reviewTestMethods: normalizeNumber(qaSrc.reviewTestMethods, 0),
+          reviewCleaningMethodValidation: normalizeNumber(qaSrc.reviewCleaningMethodValidation, 0),
+          reviewExecutedBatchRecord: normalizeNumber(qaSrc.reviewExecutedBatchRecord, 0),
+          reviewAnalyticalReleasePaperwork: normalizeNumber(qaSrc.reviewAnalyticalReleasePaperwork, 0),
+          authorPVProtocolAndReport: normalizeNumber(qaSrc.authorPVProtocolAndReport, 0),
+          reviewFPMethodValidation: normalizeNumber(qaSrc.reviewFPMethodValidation, 0),
+          newSupplierQualification: normalizeNumber(qaSrc.newSupplierQualification, 0),
+        },
+        prd: {
+          ppeCostPerHour: normalizeNumber(prdSrc.ppeCostPerHour, defaults.prd.ppeCostPerHour),
+        },
+      };
+    })(),
   };
   return migrated;
 }
@@ -1461,6 +1652,35 @@ function deleteEquipment(p, id) {
   return {
     ...p,
     equipment: p.equipment.filter(e => e.id !== id),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// === CONSUMABLE_STORE (v51) ===================================================
+
+function addConsumable(p, data = {}) {
+  return {
+    ...p,
+    consumables: [...(p.consumables || []), {
+      id: genId("CON"), name: "", capacityKg: null, unitCost: null, notes: "", ...data,
+    }],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function updateConsumable(p, id, fields) {
+  return {
+    ...p,
+    consumables: (p.consumables || []).map(c => (c.id === id ? { ...c, ...fields } : c)),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function deleteConsumable(p, id) {
+  // Built-in consumables (CON-B prefix) cannot be deleted; caller should guard.
+  return {
+    ...p,
+    consumables: (p.consumables || []).filter(c => c.id !== id),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -2149,6 +2369,41 @@ function runMassFlow(project, sortedSteps) {
 }
 
 // =============================================================================
+// === CONSUMABLE USAGE ENGINE (v51) ===========================================
+// =============================================================================
+// computeConsumableUsage: pure function; returns usage entries for packaging ops.
+//
+// For each packaging operation that has a consumableId set, computes:
+//   amountKg  -- op amount converted to kg (uses amountToKg + massFlow for density)
+//   unitsNeeded -- ceil(amountKg / consumable.capacityKg); always round up
+//   totalCost   -- unitsNeeded * consumable.unitCost (null if unitCost is null)
+//
+// Returns an array of { opId, stepId, consumableId, consumable, amountKg, unitsNeeded, totalCost }.
+// This function must not modify project state.
+function computeConsumableUsage(project, massFlowResult) {
+  if (!project) return [];
+  const consumableById = Object.fromEntries((project.consumables || []).map(c => [c.id, c]));
+  const materialById = Object.fromEntries((project.materials || []).map(m => [m.id, m]));
+  const compoundById = Object.fromEntries((project.compounds || []).map(c => [c.id, c]));
+  const result = [];
+
+  for (const op of (project.operations || [])) {
+    if (op.type !== "packaging" || !op.consumableId || !op.amount) continue;
+    const consumable = consumableById[op.consumableId];
+    if (!consumable) continue;
+    const mat = op.materialId ? materialById[op.materialId] : null;
+    // Convert op amount to kg using the material density; fall back to 1.0 if unknown.
+    const densityFallback = mat?.density ?? 1.0;
+    const amountKg = amountToKg(op.amount, op.unit, mat, compoundById, densityFallback);
+    if (!amountKg || amountKg <= 0 || !consumable.capacityKg) continue;
+    const unitsNeeded = Math.ceil(amountKg / consumable.capacityKg);
+    const totalCost = consumable.unitCost != null ? unitsNeeded * consumable.unitCost : null;
+    result.push({ opId: op.id, stepId: op.stepId, consumableId: op.consumableId, consumable, amountKg, unitsNeeded, totalCost });
+  }
+  return result;
+}
+
+// =============================================================================
 // === COST ENGINE =============================================================
 // =============================================================================
 // Computes material, equipment, and labor costs from resolved durations.
@@ -2156,7 +2411,7 @@ function runMassFlow(project, sortedSteps) {
 // Public API:
 //   computeCosts(project, massFlowResult, durationMap) -> CostResult
 //
-// CostResult: { totalBatchCost, byStep: StepCost[], byCategory, bom }
+// CostResult: { totalBatchCost, byStep: StepCost[], byCategory, bom, consumableUsage, consumableCostTotal }
 // StepCost:   { stepId, stepName, materialCost, equipmentCost, laborCost, total }
 // BomRow:     { materialId, materialName, totalKg, unitCostPerKg, totalCost, opCount }
 // =============================================================================
@@ -2234,7 +2489,7 @@ function computeCosts(project, massFlowResult, durationMap) {
     materialName: materialById[matId]?.name ?? matId,
     totalKg: parseFloat(acc.totalKg.toFixed(3)),
     unitCostPerKg: parseFloat(acc.unitCostPerKg.toFixed(4)),
-    totalCost: parseFloat(acc.totalCost.toFixed(2)),
+    lineCost: parseFloat(acc.totalCost.toFixed(2)),  // lineCost: per-batch total for this material
     opCount: acc.opCount,
   }));
 
@@ -2255,9 +2510,14 @@ function computeCosts(project, massFlowResult, durationMap) {
     labor: parseFloat(byStep.reduce((s, r) => s + r.laborCost, 0).toFixed(2)),
   };
 
+  // v51: consumable usage (packaging container counts and costs)
+  const consumableUsage = computeConsumableUsage(project, massFlowResult);
+  const consumableCostTotal = parseFloat(consumableUsage.reduce((s, u) => s + (u.totalCost ?? 0), 0).toFixed(2));
+
   return {
     totalBatchCost: parseFloat((byCategory.materials + byCategory.equipment + byCategory.labor).toFixed(2)),
     byStep, byCategory, bom,
+    consumableUsage, consumableCostTotal,
   };
 }
 
@@ -2325,6 +2585,105 @@ function buildSchedule(project, sortedSteps, durationMap) {
   }
 
   return { scheduledOps, totalDuration: parseFloat(scheduledOps.reduce((max, o) => Math.max(max, o.endTime), 0).toFixed(3)) };
+}
+
+// =============================================================================
+// === ORG COSTS ENGINE (v51) ==================================================
+// =============================================================================
+// computeOrgCosts: pure function that computes organizational cost breakdown.
+//
+// Parameters:
+//   project     -- full project (reads orgCosts quantities + steps.length)
+//   schedule    -- from buildSchedule (used for PRD PPE cost)
+//   numBatches  -- integer batch count (from batchResult or default 1)
+//
+// Returns { rd, qc, qa, prd, grand } where each section has:
+//   lineItems: [ { label, quantity, rate, rateLabel, total, autoQuantity? } ]
+//   subtotal: number
+//
+// Per-step costs use autoQuantity: true (read-only in UI, derived from steps.length).
+// =============================================================================
+function computeOrgCosts(project, schedule, numBatches) {
+  if (!project || !project.orgCosts) return null;
+  const oc = project.orgCosts;
+  const rates = ORG_COST_RATES;
+  const numSteps = (project.steps || []).length;
+  const nb = numBatches || 1;
+
+  // Sum total PRD hours from schedule for PRD PPE cost
+  let prdScheduledHours = 0;
+  if (schedule && schedule.scheduledOps) {
+    for (const sop of schedule.scheduledOps) {
+      if (sop.department === "PRD" && sop.startTime != null && sop.endTime != null) {
+        prdScheduledHours += (sop.endTime - sop.startTime);
+      }
+    }
+  }
+
+  function item(label, quantity, rate, rateLabel, auto) {
+    const total = parseFloat((quantity * rate).toFixed(2));
+    const out = { label, quantity, rate, rateLabel, total };
+    if (auto) out.autoQuantity = true;
+    return out;
+  }
+
+  const rdItems = [
+    item("Process Development", oc.rd.processDevelopmentWeeks, rates.rd.processDevelopmentPerWeek, "@ $3,750/week"),
+    item("RM Supplies (per step)", numSteps, rates.rd.rmSuppliesPerStep, "@ $1,000/step", true),
+    item("Batch Record Review (per step)", numSteps, rates.rd.batchRecordReviewPerStep, "@ $750/step", true),
+    item("Process Support Hours", oc.rd.processSupportHours, rates.rd.processSupportPerHour, "@ $93.75/h"),
+  ];
+  if (oc.rd.developmentReportIncluded) {
+    rdItems.push(item("Development Report", 1, rates.rd.developmentReportEach, "@ $3,750 each"));
+  } else {
+    rdItems.push({ label: "Development Report", quantity: 0, rate: rates.rd.developmentReportEach, rateLabel: "@ $3,750 each", total: 0, isCheckbox: true, checked: false });
+  }
+
+  const qcItems = [
+    item("QC FTE Hours", oc.qc.fteHours, rates.qc.ftePerHour, "@ $87.50/h"),
+    item("Method Transfers", oc.qc.methodTransfers, rates.qc.methodTransferEach, "@ $7,500 each"),
+    item("RM/Intermediate Releases", oc.qc.rmIntermediateReleases, rates.qc.rmIntermediateReleaseEach, "@ $1,500 each"),
+    item("Method Validations", oc.qc.methodValidations, rates.qc.methodValidationEach, "@ $15,000 each"),
+    item("Product Releases", oc.qc.productReleases, rates.qc.productReleaseEach, "@ $3,000 each"),
+    item("Stability Test Points", oc.qc.stabilityTestPoints, rates.qc.stabilityTestPointEach, "@ $3,000 each"),
+    item("Stability Storage Sets", oc.qc.stabilityStorage, rates.qc.stabilityStorageEach, "@ $40,000 each"),
+    item("Supplies/Columns (per step)", numSteps, rates.qc.suppliesColumnsPerStep, "@ $1,000/step", true),
+    item("External Lab Validations", oc.qc.externalLabValidations, rates.qc.externalLabValidationEach, "@ $12,000 each"),
+    item("External Lab Testing (batches)", oc.qc.externalLabTestingBatches, rates.qc.externalLabTestingEach, "@ $3,500 each"),
+    item("External Lab Qualifications", oc.qc.externalLabQualification, rates.qc.externalLabQualificationEach, "@ $7,500 each"),
+  ];
+
+  const qaItems = [
+    item("Review Method Transfers", oc.qa.reviewMethodTransfer, rates.qa.reviewMethodTransferEach, "@ $700 each"),
+    item("Review Specifications", oc.qa.reviewSpecifications, rates.qa.reviewSpecificationsEach, "@ $262.50 each"),
+    item("Review Analytical Documentation", oc.qa.reviewAnalyticalDocumentation, rates.qa.reviewAnalyticalDocumentationEach, "@ $1,400 each"),
+    item("Review New Master Batch Records", oc.qa.reviewNewMasterBatchRecord, rates.qa.reviewNewMasterBatchRecordEach, "@ $350 each"),
+    item("Review Test Methods", oc.qa.reviewTestMethods, rates.qa.reviewTestMethodsEach, "@ $262.50 each"),
+    item("Review Cleaning Method Validation", oc.qa.reviewCleaningMethodValidation, rates.qa.reviewCleaningMethodValidationEach, "@ $350 each"),
+    item("Review Executed Batch Records", oc.qa.reviewExecutedBatchRecord, rates.qa.reviewExecutedBatchRecordEach, "@ $700 each"),
+    item("Review Analytical Release Paperwork", oc.qa.reviewAnalyticalReleasePaperwork, rates.qa.reviewAnalyticalReleasePaperworkEach, "@ $175 each"),
+    item("Author PV Protocol & Report", oc.qa.authorPVProtocolAndReport, rates.qa.authorPVProtocolAndReportEach, "@ $2,800 each"),
+    item("Review FP Method Validation", oc.qa.reviewFPMethodValidation, rates.qa.reviewFPMethodValidationEach, "@ $1,050 each"),
+    item("New Supplier Qualifications", oc.qa.newSupplierQualification, rates.qa.newSupplierQualificationEach, "@ $875 each"),
+  ];
+
+  // PRD: PPE cost from scheduled PRD hours, batch record writing per step
+  const ppeCost = parseFloat((prdScheduledHours * nb * (oc.prd.ppeCostPerHour || 0)).toFixed(2));
+  const prdItems = [
+    { label: "PPE / Consumables (PRD labor hours)", quantity: parseFloat((prdScheduledHours * nb).toFixed(2)), rate: oc.prd.ppeCostPerHour || 0, rateLabel: "@ $" + (oc.prd.ppeCostPerHour || 0) + "/h (PRD)", total: ppeCost },
+    item("Batch Record Writing (per step)", numSteps, rates.prd.batchRecordWritingPerStep, "@ $2,000/step", true),
+  ];
+
+  function subtotal(items) {
+    return parseFloat(items.reduce((s, i) => s + (i.total || 0), 0).toFixed(2));
+  }
+
+  const rd = { lineItems: rdItems, subtotal: subtotal(rdItems) };
+  const qc = { lineItems: qcItems, subtotal: subtotal(qcItems) };
+  const qa = { lineItems: qaItems, subtotal: subtotal(qaItems) };
+  const prd = { lineItems: prdItems, subtotal: subtotal(prdItems) };
+
+  return { rd, qc, qa, prd, grand: parseFloat((rd.subtotal + qc.subtotal + qa.subtotal + prd.subtotal).toFixed(2)) };
 }
 
 // =============================================================================
@@ -2732,35 +3091,36 @@ function computeBatchSizing(project, massFlowResult, greenMetrics, sortedSteps) 
     dagBatchCounts: dagCounts, // CC-003
   };
 }
-
 // =============================================================================
 // === SIM CONTEXT =============================================================
 // =============================================================================
 // Derived simulation data -- never stored in project state.
 // Simulation result shape: { durationMap, massFlowResult, sortedSteps, cycleIds, costResult,
-//                  schedule, greenMetrics, batchResult }
+//                  schedule, greenMetrics, batchResult, orgCostResult }
 // =============================================================================
 
 const SimContext = createContext({
   durationMap: {}, massFlowResult: { stepBalances: [], vesselInventory: {}, stepOutputMassByStepId: {}, materialOutputMassByMaterialId: {}, error: null },
   sortedSteps: [], cycleIds: [], costResult: null, schedule: null, greenMetrics: null,
-  batchResult: null,
+  batchResult: null, orgCostResult: null,
 });
 
 
-// ---- ui_v49.js ----
+// ---- ui_v51.js ----
 
 // =============================================================================
-// === ui.js -- v49: React components, tab views, and app layout ==============
+// === ui.js -- v51: React components, tab views, and app layout ==============
 // =============================================================================
 // Depends on: data.js, models.js (all constants and engine functions loaded first)
 // This file contains:
 //   - Design tokens (C, MONO)
 //   - Base components: Btn, CalcPopover, CalcInfoIcon, TemplateField, etc.
-//   - All tab views: ProcessEditorTab, MaterialsTab, EquipmentTab, etc.
+//   - All tab views: ProcessEditorTab, MaterialsTab, EquipmentTab, OrgCostsTab, etc.
 //   - Root App component (export default)
 //
-// v48 (now v49) changes: removed dead fmtRatio (never called); narrowed durationMap useMemo dep.
+// v51: ChEMBL exact-match SMILES fix; Consumables section in EquipmentTab;
+//      packaging op consumable selector; consumables in BOM; OrgCosts tab;
+//      Labor Rates moved from ConfigurationTab to OrgCostsTab.
 // =============================================================================
 
 // === DESIGN TOKENS ===========================================================
@@ -2941,7 +3301,11 @@ function SmilesRenderer({ smiles, width = 180, height = 120, theme = "light" }) 
     setError(false);
     try {
       const sd = new SmiDrawer({ width, height });
-      sd.draw(smiles, canvasRef.current, theme, () => { setError(false); }, () => { setError(true); });
+      sd.draw(smiles, canvasRef.current, theme, () => { setError(false); }, () => {
+        // Log the offending SMILES to aid debugging without surfacing noise to the user.
+        console.warn("SmilesRenderer: SmiDrawer parse error for SMILES:", smiles);
+        setError(true);
+      });
     } catch (_) {
       setError(true);
     }
@@ -3449,7 +3813,65 @@ function renderLoss(op, p, d) { return <div><div style={tw}><P>Account for a los
 function renderInertPurge(op, p, d) { return <div style={tw}><P>Inert</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>with nitrogen for</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 function renderIpcCleaning(op, p, d) { return <div style={tw}><P>Clean</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>per</P><TextField value={op.notes} field="notes" opId={op.id} dispatch={d} placeholder="SOP" /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 function renderChangeoverCleaning(op, p, d) { return <div style={tw}><P>Changeover clean</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>per</P><TextField value={op.notes} field="notes" opId={op.id} dispatch={d} placeholder="SOP" /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
-function renderPackaging(op, p, d) { return <div style={tw}><P>Package</P><NumField value={op.amount} field="amount" opId={op.id} dispatch={d} /><UnitField value={op.unit} opId={op.id} dispatch={d} /><P>of</P><MatField materialId={op.materialId} project={p} dispatch={d} opId={op.id} /><P>from</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>at</P><RateField op={op} dispatch={d} field="packagingRateKgPerH" defaultVal={100} label="kg/h" title="Packaging rate (kg/h): throughput for this packaging step. Click to override." /><P>kg/h over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
+function renderPackaging(op, p, d) {
+  // Consumable selector: populated from project.consumables; shows unit count estimate when selected.
+  const consumables = p.consumables || [];
+  const selCon = consumables.find(c => c.id === op.consumableId) || null;
+
+  // Compute units needed estimate from current op amount (live, no mass flow needed for packaging kg)
+  let unitsEstimate = null;
+  if (selCon && selCon.capacityKg && op.amount && op.unit === "kg") {
+    unitsEstimate = Math.ceil(op.amount / selCon.capacityKg);
+  }
+
+  const selS = {
+    border: `1px solid ${C.border}`, borderRadius: "4px", padding: "3px 7px",
+    fontSize: "12px", fontFamily: "inherit", background: "#fff", color: C.dark,
+    outline: "none", cursor: "pointer",
+  };
+
+  return (
+    <div>
+      <div style={tw}>
+        <P>Package</P>
+        <NumField value={op.amount} field="amount" opId={op.id} dispatch={d} />
+        <UnitField value={op.unit} opId={op.id} dispatch={d} />
+        <P>of</P>
+        <MatField materialId={op.materialId} project={p} dispatch={d} opId={op.id} />
+        <P>from</P>
+        <EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} />
+        <P>at</P>
+        <RateField op={op} dispatch={d} field="packagingRateKgPerH" defaultVal={100} label="kg/h" title="Packaging rate (kg/h): throughput for this packaging step. Click to override." />
+        <P>kg/h over</P>
+        <DurationField op={op} dispatch={d} isAutoCalc={true} />
+      </div>
+      {/* Container selector: links this packaging op to a consumable for cost/BOM tracking */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", paddingLeft: "2px" }}>
+        <span style={{ fontSize: "11px", color: C.midDark, flexShrink: 0 }}>Container:</span>
+        <select
+          value={op.consumableId || ""}
+          onChange={ev => d(proj => ({
+            ...proj,
+            operations: proj.operations.map(o => o.id === op.id ? { ...o, consumableId: ev.target.value || null } : o),
+            updatedAt: new Date().toISOString(),
+          }))}
+          style={selS}
+        >
+          <option value="">-- None --</option>
+          {consumables.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {selCon && (
+          <span style={{ fontSize: "11px", color: C.midDark, fontFamily: MONO }}>
+            {unitsEstimate != null ? `~${unitsEstimate} unit${unitsEstimate !== 1 ? "s" : ""} needed` : ""}
+            {" "}(@ {selCon.capacityKg} kg/unit{selCon.unitCost != null ? `, $${selCon.unitCost}/unit` : ""})
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 function renderStaging(op, p, d) { return <div style={tw}><P>Stage</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>for</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 
 function renderOperationTemplate(op, project, dispatch) {
@@ -4189,6 +4611,7 @@ function Sidebar({ project, dispatch, activeTab, setActiveTab }) {
         { id: "balance", label: "Mass Balance", icon: "balance" },
         { id: "gantt", label: "Gantt", icon: "gantt" },
         { id: "cost", label: "Cost", icon: "dollar" },
+        { id: "orgcosts", label: "Org Costs", icon: "dollar" },
         { id: "bom", label: "BOM", icon: "dollar" },
       ]
     },
@@ -4530,6 +4953,95 @@ function EquipmentTab({ project, dispatch }) {
       <div style={{ fontSize: "11px", color: C.midDark, lineHeight: 1.6 }}>
         <strong>Builtin equipment</strong> items are pre-loaded from the standard library. Custom equipment can be added and deleted freely.
         Equipment is assigned to operations in the Process Editor.
+      </div>
+
+      {/* ===== Consumables & Packaging section ===== */}
+      <div style={{ marginTop: "32px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+          <span style={{ fontSize: "15px", fontWeight: 700, color: C.dark }}>Consumables &amp; Packaging</span>
+          <span style={{ fontSize: "12px", color: C.midDark }}>{(project.consumables || []).length} items</span>
+          <div style={{ marginLeft: "auto" }}>
+            <Btn variant="primary" onClick={() => dispatch(p => addConsumable(p))}><Icon name="plus" size={13} /> Add Consumable</Btn>
+          </div>
+        </div>
+        <div style={{ overflowX: "auto", marginBottom: "12px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px" }}>
+            <thead>
+              <tr>
+                <th style={thS}>Name</th>
+                <th style={{ ...thS, textAlign: "right" }}>Capacity (kg)</th>
+                <th style={{ ...thS, textAlign: "right" }}>Unit Cost ($/unit)</th>
+                <th style={thS}>Notes</th>
+                <th style={{ ...thS, textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(project.consumables || []).map((c, i) => {
+                const isOpenC = expandedId === c.id + "__con";
+                const isBuiltinC = BUILTIN_CONSUMABLES.some(b => b.id === c.id);
+                return (
+                  <React.Fragment key={c.id}>
+                    <tr style={{ background: i % 2 === 0 ? "#fff" : C.lightHover, cursor: "pointer" }} onClick={() => setExpandedId(isOpenC ? null : c.id + "__con")}>
+                      <td style={tdS}>
+                        {c.name || "--"}
+                        {isBuiltinC && <span style={{ marginLeft: "6px", fontSize: "9px", background: C.blue + "22", color: C.blue, borderRadius: "3px", padding: "1px 5px", fontWeight: 700 }}>BUILTIN</span>}
+                      </td>
+                      <td style={{ ...tdS, textAlign: "right", fontFamily: MONO }}>{c.capacityKg ?? "--"}</td>
+                      <td style={{ ...tdS, textAlign: "right", fontFamily: MONO }}>{c.unitCost != null ? `$${c.unitCost}` : "--"}</td>
+                      <td style={{ ...tdS, color: C.midDark }}>{c.notes || "--"}</td>
+                      <td style={{ ...tdS, textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: "6px", justifyContent: "center" }}>
+                          <button onClick={ev => { ev.stopPropagation(); setExpandedId(isOpenC ? null : c.id + "__con"); }}
+                            style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: "4px", cursor: "pointer", padding: "3px 8px", fontSize: "11px", color: C.dark }}>
+                            {isOpenC ? "Close" : "Edit"}
+                          </button>
+                          {!isBuiltinC && (
+                            <button onClick={ev => { ev.stopPropagation(); dispatch(p => deleteConsumable(p, c.id)); }}
+                              style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: "4px", cursor: "pointer", padding: "3px 8px", fontSize: "11px", color: C.orange }}>
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {isOpenC && (
+                      <tr style={{ background: C.lightHover }}>
+                        <td colSpan={5} style={{ padding: "14px 20px", borderBottom: `1px solid ${C.border}` }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: "12px" }}>
+                            <div>
+                              <div style={{ fontSize: "10px", color: C.midDark, marginBottom: "4px", fontWeight: 600 }}>Name</div>
+                              <input value={c.name || ""} onChange={ev => dispatch(p => updateConsumable(p, c.id, { name: ev.target.value }))}
+                                style={{ width: "100%", padding: "6px 8px", border: `1px solid ${C.border}`, borderRadius: "4px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box" }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: "10px", color: C.midDark, marginBottom: "4px", fontWeight: 600 }}>Capacity (kg)</div>
+                              <input type="number" min="0" step="any" value={c.capacityKg ?? ""} onChange={ev => dispatch(p => updateConsumable(p, c.id, { capacityKg: ev.target.value ? parseFloat(ev.target.value) : null }))}
+                                style={{ width: "100%", padding: "6px 8px", border: `1px solid ${C.border}`, borderRadius: "4px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box" }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: "10px", color: C.midDark, marginBottom: "4px", fontWeight: 600 }}>Unit Cost ($/unit)</div>
+                              <input type="number" min="0" step="any" value={c.unitCost ?? ""} onChange={ev => dispatch(p => updateConsumable(p, c.id, { unitCost: ev.target.value ? parseFloat(ev.target.value) : null }))}
+                                style={{ width: "100%", padding: "6px 8px", border: `1px solid ${C.border}`, borderRadius: "4px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box" }} />
+                            </div>
+                            <div style={{ gridColumn: "span 2" }}>
+                              <div style={{ fontSize: "10px", color: C.midDark, marginBottom: "4px", fontWeight: 600 }}>Notes</div>
+                              <input value={c.notes || ""} onChange={ev => dispatch(p => updateConsumable(p, c.id, { notes: ev.target.value }))}
+                                style={{ width: "100%", padding: "6px 8px", border: `1px solid ${C.border}`, borderRadius: "4px", fontSize: "13px", fontFamily: "inherit", boxSizing: "border-box" }} />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontSize: "11px", color: C.midDark, lineHeight: 1.6 }}>
+          <strong>Builtin consumables</strong> are pre-loaded packaging containers. Capacity and cost can be edited to match actual procurement prices.
+          Assign a container to a Packaging operation in the Process Editor to compute unit counts.
+        </div>
       </div>
     </div>
   );
@@ -5470,14 +5982,9 @@ function ConfigurationTab({ project, dispatch }) {
         <div style={{ fontSize: "10px", color: C.midDark, marginTop: "8px", fontStyle: "italic" }}>Solid addition rate (%/h) and packaging rate (kg/h) are now configured per-operation in the Process Editor.</div>
       </div>
 
-      {/* Labor Rates */}
-      <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: "8px", padding: "16px 20px", marginBottom: "16px" }}>
-        <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: C.midDark, marginBottom: "14px" }}>Labor Rates</div>
-        {lr.map(r => (
-          <LabelRow key={r.department} label={`${r.name} -- ${r.department} ($/h)`}>
-            <input type="number" value={r.rate} onChange={e => upR(r.department, e.target.value)} style={inpS} />
-          </LabelRow>
-        ))}
+      {/* Labor Rates moved notice */}
+      <div style={{ background: C.lightHover, border: `1px dashed ${C.border}`, borderRadius: "8px", padding: "12px 16px", marginBottom: "16px", fontSize: "12px", color: C.midDark }}>
+        <Icon name="dollar" size={13} /> Labor rates (PRD / QC) have been moved to the <strong>Org Costs</strong> tab.
       </div>
 
       {/* Project Notes */}
@@ -6616,6 +7123,57 @@ function BomTab({ project }) {
       <div style={{ fontSize: "10px", color: C.midDark, marginTop: "8px" }}>
         * Per Batch reflects the stoichiometric baseline quantity (one batch of the limiting step). Campaign totals account for the batch count needed to meet the target output.
       </div>
+
+      {/* Consumables section */}
+      {costResult.consumableUsage && costResult.consumableUsage.length > 0 && (
+        <div style={{ marginTop: "24px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: C.dark, marginBottom: "10px", paddingBottom: "6px", borderBottom: `1px solid ${C.border}` }}>
+            Consumables (Packaging Containers)
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "400px" }}>
+              <thead>
+                <tr>
+                  <th style={thS}>Container</th>
+                  <th style={{ ...thS, textAlign: "right" }}>Units / Batch</th>
+                  {showScaled && <th style={{ ...thS, textAlign: "right", color: C.orange }}>Units / Campaign</th>}
+                  <th style={{ ...thS, textAlign: "right" }}>Unit Cost</th>
+                  <th style={{ ...thS, textAlign: "right" }}>Per Batch Cost ($)</th>
+                  {showScaled && <th style={{ ...thS, textAlign: "right", color: C.orange }}>Per Campaign Cost ($)</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {costResult.consumableUsage.map((u, i) => {
+                  const opStep = project.steps.find(s => s.id === u.stepId);
+                  const campaignUnits = showScaled ? u.unitsNeeded * totalBatches : null;
+                  const campaignCost = (campaignUnits != null && u.consumable.unitCost != null) ? campaignUnits * u.consumable.unitCost : null;
+                  return (
+                    <tr key={u.opId} style={{ background: i % 2 === 0 ? "#fff" : C.lightHover }}>
+                      <td style={tdS}>
+                        {u.consumable.name}
+                        {opStep && <span style={{ marginLeft: "6px", fontSize: "10px", color: C.midDark }}>({opStep.name})</span>}
+                      </td>
+                      <td style={{ ...tdS, textAlign: "right" }}><span style={numS}>{u.unitsNeeded}</span></td>
+                      {showScaled && <td style={{ ...tdS, textAlign: "right" }}><span style={{ ...numS, color: C.orange }}>{campaignUnits ?? "--"}</span></td>}
+                      <td style={{ ...tdS, textAlign: "right" }}><span style={numS}>{u.consumable.unitCost != null ? `$${fmtUSD(u.consumable.unitCost)}` : "--"}</span></td>
+                      <td style={{ ...tdS, textAlign: "right" }}><span style={{ ...numS, color: C.blue }}>{u.totalCost != null ? `$${fmtUSD(u.totalCost)}` : "--"}</span></td>
+                      {showScaled && <td style={{ ...tdS, textAlign: "right" }}><span style={{ ...numS, color: C.orange }}>{campaignCost != null ? `$${fmtUSD(campaignCost)}` : "--"}</span></td>}
+                    </tr>
+                  );
+                })}
+                <tr style={{ background: C.lightHover, borderTop: `2px solid ${C.border}` }}>
+                  <td style={{ ...tdS, fontWeight: 700, color: C.dark }}>Total Consumables</td>
+                  <td style={{ ...tdS, textAlign: "right", fontWeight: 700 }}><span style={numS}>{costResult.consumableUsage.reduce((s, u) => s + u.unitsNeeded, 0)}</span></td>
+                  {showScaled && <td colSpan={1} />}
+                  <td style={{ ...tdS, fontWeight: 700, color: C.dark }} />
+                  <td style={{ ...tdS, textAlign: "right", fontWeight: 700 }}><span style={{ ...numS, color: C.blue }}>${fmtUSD(costResult.consumableCostTotal ?? 0)}</span></td>
+                  {showScaled && <td style={{ ...tdS, textAlign: "right", fontWeight: 700 }}><span style={{ ...numS, color: C.orange }}>${fmtUSD((costResult.consumableCostTotal ?? 0) * totalBatches)}</span></td>}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -6636,66 +7194,109 @@ function BomTab({ project }) {
 // CDN failure guard at top of InteractiveNodeGraph renders a fallback div.
 // =============================================================================
 
-// StepNode -- custom React Flow node type for a single process step.
-// Receives step name, type badge, and current selection state via data prop.
-function StepNode({ data }) {
-  const { label, stepName } = data;
+// === REACT FLOW CANVAS (v51) ==================================================
+// Combined draggable PFD canvas: step nodes + material nodes on a single canvas.
+// Step nodes are interactive (connect/disconnect, drag). Material nodes are
+// read-only display cards (compound name, SMILES structure, type).
+// Node positions are local state only -- never dispatched to project.
+// =============================================================================
+
+// StepNodeRF -- React Flow step card node.
+// Shows: step name, yield %, operation-type summary.
+// Handles: target (left, green) for upstream steps; source (right, orange) for downstream.
+function StepNodeRF({ data }) {
+  if (typeof ReactFlow === "undefined") {
+    return <div style={{ padding: "8px 12px", border: "2px solid " + C.blue, borderRadius: "8px", background: "#fff", fontSize: "12px" }}>{data.label}</div>;
+  }
+  const { Handle, Position } = ReactFlow;
+  const { label, yieldPct, opBadges } = data;
   return (
     <div style={{
-      background: "#fff", border: "2px solid " + C.blue, borderRadius: "8px",
-      padding: "8px 12px", minWidth: "140px", fontSize: "12px",
+      background: "#fff", border: "2px solid " + C.blue, borderRadius: "10px",
+      padding: "10px 14px", minWidth: "150px", maxWidth: "200px", fontSize: "12px",
+      boxShadow: "0 2px 10px rgba(0,0,0,0.12)",
+      fontFamily: "system-ui,-apple-system,'Segoe UI',sans-serif",
+    }}>
+      <Handle type="target" position={Position.Left}
+        style={{ background: C.green, width: 10, height: 10, border: "2px solid #fff" }} />
+      <div style={{ fontWeight: 700, color: C.dark, marginBottom: "4px",
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "13px" }}>
+        {label}
+      </div>
+      {yieldPct != null && (
+        <div style={{ fontSize: "10px", color: C.green, fontWeight: 600, marginBottom: "2px" }}>
+          Yield: {fmtPctSig(yieldPct)}
+        </div>
+      )}
+      {opBadges && opBadges.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", marginTop: "4px" }}>
+          {opBadges.slice(0, 4).map((b, i) => (
+            <span key={i} style={{
+              fontSize: "9px", padding: "1px 5px", borderRadius: "10px",
+              background: C.lightHover, color: C.midDark, border: `1px solid ${C.border}`,
+            }}>{b}</span>
+          ))}
+        </div>
+      )}
+      <Handle type="source" position={Position.Right}
+        style={{ background: C.orange, width: 10, height: 10, border: "2px solid #fff" }} />
+    </div>
+  );
+}
+
+// MaterialNodeRF -- React Flow material card node (read-only, draggable).
+// Shows: compound/material name, type badge, optional SMILES mini-structure.
+// No handles -- material nodes are display-only in the canvas.
+function MaterialNodeRF({ data }) {
+  const { name, symbol, smiles, matType, mw, isProduct, isIntermediate } = data;
+  const borderColor = isProduct ? C.green : isIntermediate ? C.orange : C.mid;
+  const typePill = matType ? matType.replace("_", " ") : "";
+  return (
+    <div style={{
+      background: "#fff", border: "2px solid " + borderColor, borderRadius: "10px",
+      padding: "8px 10px", width: "160px", fontSize: "11px",
       boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
       fontFamily: "system-ui,-apple-system,'Segoe UI',sans-serif",
     }}>
-      <div style={{ fontWeight: 700, color: C.dark, marginBottom: "2px",
-        maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {label}
+      <div style={{ fontWeight: 700, color: C.dark, marginBottom: "3px",
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12px" }}>
+        {name || symbol || "Unknown"}
       </div>
-      {stepName !== label && (
-        <div style={{ fontSize: "10px", color: C.midDark, fontStyle: "italic" }}>{stepName}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: smiles ? "6px" : "0" }}>
+        {typePill && (
+          <span style={{
+            fontSize: "9px", padding: "1px 5px", borderRadius: "10px",
+            background: isProduct ? "#e8f4e8" : isIntermediate ? "#fff3ed" : C.lightHover,
+            color: isProduct ? C.green : isIntermediate ? C.orange : C.midDark,
+            border: `1px solid ${borderColor}`, fontWeight: 600,
+          }}>{typePill}</span>
+        )}
+        {mw && <span style={{ fontSize: "9px", color: C.midDark, fontFamily: MONO }}>{fmtSig(mw, 4)} g/mol</span>}
+      </div>
+      {smiles && (
+        <div style={{ display: "flex", justifyContent: "center", background: C.lightHover, borderRadius: "6px", overflow: "hidden" }}>
+          <SmilesRenderer smiles={smiles} width={140} height={80} />
+        </div>
       )}
     </div>
   );
 }
 
-// StepNode requires React Flow handle elements for edge connections.
-// These are provided via React Flow's Handle component, rendered inside StepNode.
-// We wrap StepNode to inject handles after confirming the global is available.
-function StepNodeWithHandles({ data }) {
-  if (typeof ReactFlow === "undefined") return <StepNode data={data} />;
-  const { Handle, Position } = ReactFlow;
-  return (
-    <div style={{
-      background: "#fff", border: "2px solid " + C.blue, borderRadius: "8px",
-      padding: "8px 12px", minWidth: "140px", fontSize: "12px",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
-      fontFamily: "system-ui,-apple-system,'Segoe UI',sans-serif",
-    }}>
-      <Handle type="target" position={Position.Left}
-        style={{ background: C.green, width: 10, height: 10 }} />
-      <div style={{ fontWeight: 700, color: C.dark, marginBottom: "2px",
-        maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {data.label}
-      </div>
-      <Handle type="source" position={Position.Right}
-        style={{ background: C.orange, width: 10, height: 10 }} />
-    </div>
-  );
-}
+// PFD_NODE_TYPES: module-scope to prevent React Flow from re-creating on every render.
+// Includes both step nodes (interactive) and material nodes (display-only).
+const PFD_NODE_TYPES = { stepNode: StepNodeRF, materialNode: MaterialNodeRF };
 
-// NODE_TYPES: module-scope so React Flow does not re-create on every render.
-// Must be defined after StepNodeWithHandles.
-const STEP_NODE_TYPES = { stepNode: StepNodeWithHandles };
-
-// InteractiveNodeGraph -- self-contained React Flow canvas component.
-// Owns all RF state and event handlers. Project and dispatch are the only external deps.
-// Node positions persist in local state (nodePositions map) -- never dispatched.
-function InteractiveNodeGraph({ project, dispatch }) {
+// PfdNodeGraph -- combined draggable PFD canvas (v51).
+// Replaces the simpler InteractiveNodeGraph. Renders both step and material nodes.
+// Step nodes: editable connections (onConnect/onEdgesDelete dispatches to project).
+// Material nodes: display-only, draggable, no connection handles.
+// Node positions: local state only -- never dispatched.
+function PfdNodeGraph({ project, dispatch }) {
   // CDN failure guard -- surface a clear error if ReactFlow did not load.
   if (typeof ReactFlow === "undefined" || !ReactFlow.ReactFlow) {
     return (
       <div style={{ padding: "32px", textAlign: "center", color: C.midDark }}>
-        Step graph unavailable -- React Flow library did not load.
+        Draggable canvas unavailable -- React Flow library did not load.
         Check your network connection and reload the page.
       </div>
     );
@@ -6704,95 +7305,246 @@ function InteractiveNodeGraph({ project, dispatch }) {
   const { ReactFlow: RF, Background, Controls, MiniMap,
           addEdge, useNodesState, useEdgesState } = ReactFlow;
 
-  const { sortedSteps } = useContext(SimContext);
+  const { sortedSteps, costResult } = useContext(SimContext);
 
-  // nodePositions: stepId -> {x, y} -- local UI state, never written to project.
+  // nodePositions: "s:{stepId}" | "m:{matId}" -> {x, y} -- local UI state only.
   const [nodePositions, setNodePositions] = useState({});
-  // cycleWarning: shown briefly when a proposed connection would create a cycle.
   const [cycleWarning, setCycleWarning] = useState(false);
 
-  // Derive RF nodes and edges from project state each render.
-  // Initial positions come from computePfdLayout to give a sensible starting arrangement.
-  const derivedNodes = useMemo(() => {
+  // Build operation type summary badges for each step.
+  const stepOpBadges = useMemo(() => {
+    const map = {};
+    (project.steps || []).forEach(step => {
+      const ops = (project.operations || []).filter(o => o.stepId === step.id);
+      const types = [...new Set(ops.map(o => {
+        const ot = OPERATION_TYPES.find(t => t.value === o.type);
+        return ot ? ot.label : o.type;
+      }))];
+      map[step.id] = types;
+    });
+    return map;
+  }, [project.steps, project.operations]);
+
+  // Build compound lookup from project compounds for material nodes.
+  const compoundById = useMemo(() =>
+    Object.fromEntries((project.compounds || []).map(c => [c.id, c])),
+    [project.compounds]
+  );
+
+  // Build material lookup from project materials.
+  const materialById = useMemo(() =>
+    Object.fromEntries((project.materials || []).map(m => [m.id, m])),
+    [project.materials]
+  );
+
+  // Determine which materials to show as nodes:
+  // - Intermediate outputs (step.intermediateOutputMaterialId)
+  // - Starting materials (materials used in addition ops on root steps)
+  const visibleMatIds = useMemo(() => {
+    const ids = new Set();
+    const steps = Array.isArray(sortedSteps) ? sortedSteps : [];
+    // All intermediate outputs
+    steps.forEach(step => {
+      if (step.intermediateOutputMaterialId) ids.add(step.intermediateOutputMaterialId);
+    });
+    // Starting materials: addition ops on root steps (no upstream steps)
+    const rootStepIds = new Set(steps.filter(s => (s.upstreamStepIds || []).length === 0).map(s => s.id));
+    (project.operations || []).forEach(op => {
+      if (op.type === "addition" && op.materialId && rootStepIds.has(op.stepId)) {
+        ids.add(op.materialId);
+      }
+    });
+    return ids;
+  }, [sortedSteps, project.operations]);
+
+  // Derive RF nodes and edges from project state.
+  // Initial positions come from computePfdLayout grid layout.
+  const { derivedNodes, derivedEdges } = useMemo(() => {
+    const steps = Array.isArray(sortedSteps) ? sortedSteps : [];
     let layout = null;
-    try { layout = computePfdLayout(project, Array.isArray(sortedSteps) ? sortedSteps : []); } catch (_) {}
-    const CELL_W = 200, CELL_H = 120;
-    return (Array.isArray(sortedSteps) ? sortedSteps : []).map(step => {
-      // Use persisted position if available; fall back to computePfdLayout grid coords.
-      const pos = nodePositions[step.id];
+    try { layout = computePfdLayout(project, steps); } catch (_) {}
+    const CELL_W = 260, CELL_H = 160;
+
+    // Step nodes
+    const stepNodes = steps.map(step => {
       const col = layout ? (layout.depthOf[step.id] ?? 0) : 0;
       const row = layout ? (layout.rowOf[step.id] ?? 0) : 0;
+      const defaultPos = { x: col * CELL_W + 80, y: row * CELL_H + 40 };
+      const pos = nodePositions["s:" + step.id] ?? defaultPos;
+      const yieldPct = step.yield != null ? step.yield * 100 : null;
       return {
-        id: step.id,
+        id: "s:" + step.id,
         type: "stepNode",
-        position: pos ?? { x: (col + 1) * CELL_W, y: row * CELL_H + 40 },
-        data: { label: step.name, stepName: step.name },
+        position: pos,
+        data: {
+          label: step.name,
+          yieldPct,
+          opBadges: stepOpBadges[step.id] || [],
+        },
       };
     });
-  }, [project, sortedSteps, nodePositions]);
 
-  const derivedEdges = useMemo(() => {
+    // Material nodes -- positioned relative to their associated step.
+    const matNodes = [];
+    const usedMatIds = new Set();
+    steps.forEach(step => {
+      const col = layout ? (layout.depthOf[step.id] ?? 0) : 0;
+      const row = layout ? (layout.rowOf[step.id] ?? 0) : 0;
+
+      // Output (intermediate / product) material node -- positioned to right of step
+      const outMatId = step.intermediateOutputMaterialId;
+      if (outMatId && !usedMatIds.has(outMatId) && visibleMatIds.has(outMatId)) {
+        usedMatIds.add(outMatId);
+        const mat = materialById[outMatId];
+        const cmpId = mat && mat.composition && mat.composition.length === 1
+          ? mat.composition[0].compoundId : mat && mat.compoundId;
+        const cmp = cmpId ? compoundById[cmpId] : null;
+        const isProduct = !!(cmp && cmp.isProduct);
+        const defaultPos = { x: col * CELL_W + 280, y: row * CELL_H + 40 };
+        matNodes.push({
+          id: "m:" + outMatId,
+          type: "materialNode",
+          position: nodePositions["m:" + outMatId] ?? defaultPos,
+          draggable: true,
+          data: {
+            name: mat ? mat.name : outMatId,
+            smiles: cmp ? cmp.smiles : null,
+            matType: mat ? mat.type : null,
+            mw: cmp ? cmp.molecularWeight : null,
+            isProduct,
+            isIntermediate: !isProduct,
+          },
+        });
+      }
+    });
+
+    // Starting material nodes -- to the left of root steps
+    (Array.isArray(sortedSteps) ? sortedSteps : [])
+      .filter(s => (s.upstreamStepIds || []).length === 0)
+      .forEach(step => {
+        const col = layout ? (layout.depthOf[step.id] ?? 0) : 0;
+        const row = layout ? (layout.rowOf[step.id] ?? 0) : 0;
+        // Collect addition ops for this step
+        const addOps = (project.operations || []).filter(o => o.stepId === step.id && o.type === "addition" && o.materialId && visibleMatIds.has(o.materialId));
+        addOps.forEach((op, idx) => {
+          if (usedMatIds.has(op.materialId)) return;
+          usedMatIds.add(op.materialId);
+          const mat = materialById[op.materialId];
+          const cmpId = mat && mat.composition && mat.composition.length === 1
+            ? mat.composition[0].compoundId : mat && mat.compoundId;
+          const cmp = cmpId ? compoundById[cmpId] : null;
+          const defaultPos = { x: col * CELL_W - 200, y: row * CELL_H + 40 + idx * 180 };
+          matNodes.push({
+            id: "m:" + op.materialId,
+            type: "materialNode",
+            position: nodePositions["m:" + op.materialId] ?? defaultPos,
+            draggable: true,
+            data: {
+              name: mat ? mat.name : op.materialId,
+              smiles: cmp ? cmp.smiles : null,
+              matType: mat ? mat.type : null,
+              mw: cmp ? cmp.molecularWeight : null,
+              isProduct: false,
+              isIntermediate: false,
+            },
+          });
+        });
+      });
+
+    const nodes = [...stepNodes, ...matNodes];
+
+    // Edges
     const edges = [];
-    (Array.isArray(sortedSteps) ? sortedSteps : []).forEach(step => {
+    // Step -> downstream step (editable)
+    steps.forEach(step => {
       (step.upstreamStepIds || []).forEach(upId => {
         edges.push({
-          id: `e-${upId}-${step.id}`,
-          source: upId, target: step.id,
+          id: "e-s:" + upId + "-s:" + step.id,
+          source: "s:" + upId, target: "s:" + step.id,
           animated: false, style: { stroke: C.blue, strokeWidth: 2 },
         });
       });
     });
-    return edges;
-  }, [sortedSteps]);
+    // Step -> output material (display-only, dashed)
+    steps.forEach(step => {
+      if (!step.intermediateOutputMaterialId) return;
+      const matId = step.intermediateOutputMaterialId;
+      if (!usedMatIds.has(matId)) return;
+      edges.push({
+        id: "e-out-s:" + step.id + "-m:" + matId,
+        source: "s:" + step.id, target: "m:" + matId,
+        animated: false,
+        style: { stroke: C.orange, strokeWidth: 1.5, strokeDasharray: "4 3" },
+        type: "default",
+      });
+    });
+    // Starting material -> step (display-only, dashed)
+    steps.filter(s => (s.upstreamStepIds || []).length === 0).forEach(step => {
+      const addOps = (project.operations || []).filter(o => o.stepId === step.id && o.type === "addition" && o.materialId && usedMatIds.has(o.materialId));
+      addOps.forEach(op => {
+        edges.push({
+          id: "e-in-m:" + op.materialId + "-s:" + step.id,
+          source: "m:" + op.materialId, target: "s:" + step.id,
+          animated: false,
+          style: { stroke: C.mid, strokeWidth: 1.5, strokeDasharray: "4 3" },
+          type: "default",
+        });
+      });
+    });
+
+    return { derivedNodes: nodes, derivedEdges: edges };
+  }, [project, sortedSteps, nodePositions, visibleMatIds, stepOpBadges, compoundById, materialById]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
 
-  // Keep RF nodes/edges in sync when project steps change (e.g. step added/removed).
-  // Positions are merged from nodePositions so user-dragged positions are preserved.
-  useEffect(() => {
-    setNodes(derivedNodes);
-  }, [derivedNodes]);
-  useEffect(() => {
-    setEdges(derivedEdges);
-  }, [derivedEdges]);
+  // Sync RF nodes/edges when project or positions change.
+  useEffect(() => { setNodes(derivedNodes); }, [derivedNodes]);
+  useEffect(() => { setEdges(derivedEdges); }, [derivedEdges]);
 
-  // onConnect: user draws a cable from source to target port.
-  // Cycle guard: reject the connection if it would create a cycle.
+  // onConnect: user draws a cable between two step nodes.
+  // Only step-to-step connections are editable; rejects connections involving material nodes.
+  // Cycle guard prevents DAG cycles.
   const onConnect = useCallback((connection) => {
     const { source, target } = connection;
     if (!source || !target) return;
-    // Simulate the new edge being added and check for cycles.
+    // Only allow step-to-step connections (both IDs must start with "s:")
+    if (!source.startsWith("s:") || !target.startsWith("s:")) return;
+    const srcStepId = source.slice(2);
+    const tgtStepId = target.slice(2);
     const proposedSteps = project.steps.map(s => {
-      if (s.id !== target) return s;
-      return { ...s, upstreamStepIds: [...(s.upstreamStepIds || []), source] };
+      if (s.id !== tgtStepId) return s;
+      return { ...s, upstreamStepIds: [...(s.upstreamStepIds || []), srcStepId] };
     });
     if (detectCycles(proposedSteps).length > 0) {
       setCycleWarning(true);
       setTimeout(() => setCycleWarning(false), 2500);
       return;
     }
-    dispatch(p => updateStep(p, target, {
-      upstreamStepIds: [...(p.steps.find(s => s.id === target)?.upstreamStepIds || []), source],
+    dispatch(p => updateStep(p, tgtStepId, {
+      upstreamStepIds: [...(p.steps.find(s => s.id === tgtStepId)?.upstreamStepIds || []), srcStepId],
     }));
     setEdges(eds => addEdge({ ...connection, animated: false, style: { stroke: C.blue, strokeWidth: 2 } }, eds));
   }, [project.steps, dispatch]);
 
-  // onEdgesDelete: remove the upstreamStepId when the user deletes an edge.
+  // onEdgesDelete: only process step-to-step edges (prefixed "e-s:").
   const onEdgesDelete = useCallback((deletedEdges) => {
     deletedEdges.forEach(edge => {
+      if (!edge.id.startsWith("e-s:")) return; // skip material display edges
       const { source, target } = edge;
+      const srcStepId = source.startsWith("s:") ? source.slice(2) : source;
+      const tgtStepId = target.startsWith("s:") ? target.slice(2) : target;
       dispatch(p => {
-        const step = p.steps.find(s => s.id === target);
+        const step = p.steps.find(s => s.id === tgtStepId);
         if (!step) return p;
-        return updateStep(p, target, {
-          upstreamStepIds: (step.upstreamStepIds || []).filter(id => id !== source),
+        return updateStep(p, tgtStepId, {
+          upstreamStepIds: (step.upstreamStepIds || []).filter(id => id !== srcStepId),
         });
       });
     });
   }, [dispatch]);
 
-  // onNodeDragStop: persist position in local state only -- do NOT dispatch.
+  // onNodeDragStop: persist position in local state only -- never dispatched.
   const onNodeDragStop = useCallback((event, node) => {
     setNodePositions(prev => ({ ...prev, [node.id]: node.position }));
   }, []);
@@ -6814,7 +7566,7 @@ function InteractiveNodeGraph({ project, dispatch }) {
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
         onConnect={onConnect} onEdgesDelete={onEdgesDelete}
         onNodeDragStop={onNodeDragStop}
-        nodeTypes={STEP_NODE_TYPES}
+        nodeTypes={PFD_NODE_TYPES}
         fitView
         style={{ background: C.light }}
       >
@@ -6886,7 +7638,7 @@ function computePfdLayout(project, sortedSteps) {
 
 function PfdTab({ project, dispatch }) {
   const { massFlowResult, sortedSteps, batchResult } = useContext(SimContext);
-  const [pfdView, setPfdView] = useState("flow"); // "flow" = existing static view | "graph" = React Flow step graph
+  const [pfdView, setPfdView] = useState("graph"); // "graph" = React Flow draggable canvas (default) | "flow" = static diagram
   const [yieldEditId, setYieldEditId] = useState(null); // stepId being edited
   const [yieldEditVal, setYieldEditVal] = useState("");
   const [targetEditActive, setTargetEditActive] = useState(false);
@@ -6905,27 +7657,28 @@ function PfdTab({ project, dispatch }) {
   );
 
   // View toggle -- local to PfdTab, not lifted to App or project state.
-  // "flow" = existing material-node static diagram; "graph" = React Flow interactive step graph.
+  // "graph" = React Flow draggable canvas with step + material nodes (default);
+  // "flow"  = existing static material-node grid diagram (fallback).
   const viewToggle = (
     <div style={{ display: "flex", gap: "6px" }}>
-      <Btn variant={pfdView === "flow" ? "primary" : "light"} size="sm" onClick={() => setPfdView("flow")}>Flow Diagram</Btn>
-      <Btn variant={pfdView === "graph" ? "primary" : "light"} size="sm" onClick={() => setPfdView("graph")}>Step Graph</Btn>
+      <Btn variant={pfdView === "graph" ? "primary" : "light"} size="sm" onClick={() => setPfdView("graph")}>Draggable Canvas</Btn>
+      <Btn variant={pfdView === "flow" ? "primary" : "light"} size="sm" onClick={() => setPfdView("flow")}>Static Diagram</Btn>
     </div>
   );
 
-  // Step Graph sub-tab: React Flow interactive canvas.
+  // Draggable Canvas sub-tab: React Flow interactive canvas with step + material nodes.
   if (pfdView === "graph") {
     return (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 24px", borderBottom: `1px solid ${C.border}`, background: "#fff" }}>
-          <span style={{ fontSize: "17px", fontWeight: 700, color: C.dark }}>Step Graph</span>
+          <span style={{ fontSize: "17px", fontWeight: 700, color: C.dark }}>Process Flow Canvas</span>
           <span style={{ fontSize: "12px", color: C.midDark, flex: 1 }}>
-            Drag nodes to rearrange &mdash; draw cables between ports to link steps &mdash; select an edge and press Delete to remove
+            Drag nodes to rearrange &mdash; draw cables between step ports to link steps &mdash; select an edge and press Delete to remove
           </span>
           {viewToggle}
         </div>
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <InteractiveNodeGraph project={project} dispatch={dispatch} />
+          <PfdNodeGraph project={project} dispatch={dispatch} />
         </div>
       </div>
     );
@@ -7515,6 +8268,248 @@ function PfdTab({ project, dispatch }) {
 // === ROOT APP ================================================================
 // =============================================================================
 
+// =============================================================================
+// === ORG COSTS TAB ===========================================================
+// =============================================================================
+// Four collapsible sections: R&D, QC, QA, PRD costs, plus Labor Rates card.
+// Labor Rates moved here from ConfigurationTab (v51).
+// Uses fixed ORG_COST_RATES constants from data.js; user enters quantities.
+// =============================================================================
+
+function OrgCostsTab({ project, dispatch }) {
+  const { orgCostResult } = useContext(SimContext);
+  const [collapsed, setCollapsed] = useState({ rd: false, qc: false, qa: false, prd: false, labor: false });
+  const toggleCollapse = (key) => setCollapsed(c => ({ ...c, [key]: !c[key] }));
+  const lr = project.laborRates || [];
+
+  const upOC = (section, field, val) => dispatch(p => ({
+    ...p,
+    orgCosts: { ...p.orgCosts, [section]: { ...p.orgCosts[section], [field]: val } },
+    updatedAt: new Date().toISOString(),
+  }));
+  const upR = (dept, val) => dispatch(p => ({
+    ...p,
+    laborRates: p.laborRates.map(r => r.department === dept ? { ...r, rate: parseFloat(val) || 0 } : r),
+    updatedAt: new Date().toISOString(),
+  }));
+
+  const inpS = {
+    border: `1px solid ${C.border}`, borderRadius: "4px", padding: "4px 8px",
+    fontSize: "13px", fontFamily: "inherit", background: "#fff", color: C.dark,
+    outline: "none", width: "90px", textAlign: "right",
+  };
+  const secCardS = {
+    background: "#fff", border: `1px solid ${C.border}`, borderRadius: "8px",
+    marginBottom: "14px", overflow: "hidden",
+  };
+  const secHeaderS = (color) => ({
+    display: "flex", alignItems: "center", gap: "10px",
+    padding: "12px 18px", cursor: "pointer", background: C.lightHover,
+    borderBottom: `1px solid ${C.border}`,
+  });
+
+  function SectionHeader({ label, subtotal, skey }) {
+    return (
+      <div style={secHeaderS(C.dark)} onClick={() => toggleCollapse(skey)}>
+        <Icon name={collapsed[skey] ? "chevronRight" : "chevronDown"} size={14} />
+        <span style={{ fontWeight: 700, fontSize: "14px", color: C.dark, flex: 1 }}>{label}</span>
+        {subtotal != null && (
+          <span style={{ fontFamily: MONO, fontSize: "13px", color: C.dark }}>
+            ${fmtUSD(subtotal)}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  function OrgRow({ itm, section, qtyField, isAuto, isCheckbox }) {
+    const qty = isAuto ? itm.quantity : null;
+    const userQty = isCheckbox
+      ? (project.orgCosts[section]?.[qtyField] || false)
+      : (project.orgCosts[section]?.[qtyField] ?? 0);
+    const displayQty = isAuto ? qty : userQty;
+    const total = isCheckbox
+      ? (userQty ? itm.rate : 0)
+      : parseFloat(((isAuto ? itm.quantity : userQty) * itm.rate).toFixed(2));
+
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "7px 18px", borderBottom: `1px solid ${C.lightBorder}`, fontSize: "13px" }}>
+        <span style={{ flex: 1, color: C.dark }}>{itm.label}</span>
+        <span style={{ color: C.midDark, fontSize: "11px", minWidth: "130px", textAlign: "right" }}>{itm.rateLabel}</span>
+        {isCheckbox ? (
+          <input type="checkbox" checked={!!userQty}
+            onChange={ev => upOC(section, qtyField, ev.target.checked)}
+            style={{ width: "18px", height: "18px", cursor: "pointer" }} />
+        ) : isAuto ? (
+          <span style={{ ...inpS, background: C.lightHover, color: C.midDark, display: "inline-block", textAlign: "right", minWidth: "90px" }}>
+            {displayQty} <span style={{ fontSize: "10px" }}>(auto)</span>
+          </span>
+        ) : (
+          <input type="number" min="0" step="any" value={userQty}
+            onChange={ev => upOC(section, qtyField, Math.max(0, parseFloat(ev.target.value) || 0))}
+            style={inpS} />
+        )}
+        <span style={{ fontFamily: MONO, fontSize: "13px", color: C.dark, minWidth: "80px", textAlign: "right" }}>
+          ${fmtUSD(total)}
+        </span>
+      </div>
+    );
+  }
+
+  const r = orgCostResult || { rd: null, qc: null, qa: null, prd: null, grand: 0 };
+
+  // Map section -> field names for user-entered quantities
+  const rdFields = { processDevelopmentWeeks: null, processSupportHours: null, developmentReportIncluded: null };
+  const prdPpeField = "ppeCostPerHour";
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+        <Icon name="dollar" size={18} />
+        <span style={{ fontSize: "17px", fontWeight: 700, color: C.dark }}>Org Costs</span>
+        <span style={{ fontSize: "12px", color: C.midDark }}>{project.name}</span>
+        {r.grand > 0 && (
+          <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: "15px", fontWeight: 700, color: C.dark }}>
+            Total: ${fmtUSD(r.grand)}
+          </span>
+        )}
+      </div>
+
+      {/* Hourly Labor Rates (moved from ConfigurationTab v51) */}
+      <div style={secCardS}>
+        <div style={secHeaderS()} onClick={() => toggleCollapse("labor")}>
+          <Icon name={collapsed.labor ? "chevronRight" : "chevronDown"} size={14} />
+          <span style={{ fontWeight: 700, fontSize: "14px", color: C.dark, flex: 1 }}>Hourly Labor Rates (PRD / QC)</span>
+        </div>
+        {!collapsed.labor && (
+          <div style={{ padding: "14px 18px" }}>
+            {lr.map(row => (
+              <div key={row.department} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", fontSize: "13px" }}>
+                <span style={{ flex: 1, color: C.dark }}>{row.name} ({row.department})</span>
+                <span style={{ color: C.midDark, fontSize: "11px" }}>$/h</span>
+                <input type="number" min="0" step="any" value={row.rate}
+                  onChange={ev => upR(row.department, ev.target.value)}
+                  style={inpS} />
+              </div>
+            ))}
+            <div style={{ fontSize: "11px", color: C.midDark, marginTop: "6px" }}>
+              PRD hourly rate feeds duration-based operation labor costs throughout the process. QC rate is used for IPC and release testing labor estimates.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* R&D Costs */}
+      <div style={secCardS}>
+        <SectionHeader label="R&D Costs" subtotal={r.rd?.subtotal} skey="rd" />
+        {!collapsed.rd && (
+          <div>
+            {r.rd?.lineItems.map((itm, i) => {
+              const isAuto = !!itm.autoQuantity;
+              const isCB = !!itm.isCheckbox;
+              const fields = { "Process Development": "processDevelopmentWeeks", "Process Support Hours": "processSupportHours", "Development Report": "developmentReportIncluded", "RM Supplies (per step)": null, "Batch Record Review (per step)": null };
+              const qf = fields[itm.label] ?? null;
+              return <OrgRow key={i} itm={itm} section="rd" qtyField={qf} isAuto={isAuto} isCheckbox={isCB} />;
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* QC Costs */}
+      <div style={secCardS}>
+        <SectionHeader label="QC Costs" subtotal={r.qc?.subtotal} skey="qc" />
+        {!collapsed.qc && (
+          <div>
+            {r.qc?.lineItems.map((itm, i) => {
+              const isAuto = !!itm.autoQuantity;
+              const qcFieldMap = {
+                "QC FTE Hours": "fteHours", "Method Transfers": "methodTransfers",
+                "RM/Intermediate Releases": "rmIntermediateReleases", "Method Validations": "methodValidations",
+                "Product Releases": "productReleases", "Stability Test Points": "stabilityTestPoints",
+                "Stability Storage Sets": "stabilityStorage", "Supplies/Columns (per step)": null,
+                "External Lab Validations": "externalLabValidations", "External Lab Testing (batches)": "externalLabTestingBatches",
+                "External Lab Qualifications": "externalLabQualification",
+              };
+              const qf = qcFieldMap[itm.label] ?? null;
+              return <OrgRow key={i} itm={itm} section="qc" qtyField={qf} isAuto={isAuto} isCheckbox={false} />;
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* QA Costs */}
+      <div style={secCardS}>
+        <SectionHeader label="QA Costs" subtotal={r.qa?.subtotal} skey="qa" />
+        {!collapsed.qa && (
+          <div>
+            {r.qa?.lineItems.map((itm, i) => {
+              const qaFieldMap = {
+                "Review Method Transfers": "reviewMethodTransfer", "Review Specifications": "reviewSpecifications",
+                "Review Analytical Documentation": "reviewAnalyticalDocumentation",
+                "Review New Master Batch Records": "reviewNewMasterBatchRecord", "Review Test Methods": "reviewTestMethods",
+                "Review Cleaning Method Validation": "reviewCleaningMethodValidation",
+                "Review Executed Batch Records": "reviewExecutedBatchRecord",
+                "Review Analytical Release Paperwork": "reviewAnalyticalReleasePaperwork",
+                "Author PV Protocol & Report": "authorPVProtocolAndReport",
+                "Review FP Method Validation": "reviewFPMethodValidation",
+                "New Supplier Qualifications": "newSupplierQualification",
+              };
+              const qf = qaFieldMap[itm.label] ?? null;
+              return <OrgRow key={i} itm={itm} section="qa" qtyField={qf} isAuto={false} isCheckbox={false} />;
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* PRD Costs */}
+      <div style={secCardS}>
+        <SectionHeader label="PRD Costs" subtotal={r.prd?.subtotal} skey="prd" />
+        {!collapsed.prd && (
+          <div>
+            {r.prd?.lineItems.map((itm, i) => {
+              const isAuto = !!itm.autoQuantity;
+              const isPpe = itm.label.startsWith("PPE");
+              if (isPpe) {
+                // PPE row: user edits $/h rate, quantity comes from scheduled PRD hours
+                return (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "7px 18px", borderBottom: `1px solid ${C.lightBorder}`, fontSize: "13px" }}>
+                    <span style={{ flex: 1, color: C.dark }}>{itm.label}</span>
+                    <span style={{ color: C.midDark, fontSize: "11px", minWidth: "130px", textAlign: "right" }}>PRD hours x batches x</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span style={{ fontSize: "11px", color: C.midDark }}>$</span>
+                      <input type="number" min="0" step="any"
+                        value={project.orgCosts.prd?.ppeCostPerHour ?? 10}
+                        onChange={ev => upOC("prd", "ppeCostPerHour", Math.max(0, parseFloat(ev.target.value) || 0))}
+                        style={{ ...inpS, width: "70px" }} />
+                      <span style={{ fontSize: "11px", color: C.midDark }}>/h</span>
+                    </div>
+                    <span style={{ fontFamily: MONO, fontSize: "13px", color: C.dark, minWidth: "80px", textAlign: "right" }}>
+                      ${fmtUSD(itm.total)}
+                    </span>
+                  </div>
+                );
+              }
+              return <OrgRow key={i} itm={itm} section="prd" qtyField={null} isAuto={isAuto} isCheckbox={false} />;
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Grand total footer */}
+      <div style={{ padding: "14px 20px", background: C.lightHover, border: `1px solid ${C.border}`, borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: "14px", fontWeight: 700, color: C.dark }}>Grand Total (Org Costs)</span>
+        <span style={{ fontFamily: MONO, fontSize: "17px", fontWeight: 700, color: C.dark }}>${fmtUSD(r.grand)}</span>
+      </div>
+      <div style={{ fontSize: "11px", color: C.midDark, marginTop: "10px", lineHeight: 1.6 }}>
+        Per-step rows (auto) are computed from the current number of process steps. PRD PPE cost uses scheduled PRD hours multiplied by the batch count and your entered $/h rate. All other quantities are user-entered.
+      </div>
+    </div>
+  );
+}
+
+// === ROOT APP ================================================================
+// =============================================================================
+
 function App() {
   const { project, dispatch, undo, redo, canUndo, canRedo, loadProject } = useProjectState(makeEmptyProject());
   const [activeTab, setActiveTab] = useState("process");
@@ -7561,8 +8556,12 @@ function App() {
   const schedule = useMemo(() => buildSchedule(project, sortedArr, durationMap), [project, sortedArr, durationMap]);
   const greenMetrics = useMemo(() => computeGreenMetrics(project, massFlowResult), [project, massFlowResult]);
   const batchResult = useMemo(() => computeBatchSizing(project, massFlowResult, greenMetrics, sortedArr), [project, massFlowResult, greenMetrics, sortedArr]);
-  const simValue = useMemo(() => ({ durationMap, massFlowResult, sortedSteps: sortedArr, cycleIds, costResult, schedule, greenMetrics, batchResult }),
-    [durationMap, massFlowResult, sortedArr, cycleIds, costResult, schedule, greenMetrics, batchResult]);
+  const orgCostResult = useMemo(() => {
+    const nb = batchResult?.stepVolumes?.reduce((m, sv) => Math.max(m, sv?.batchCount || 1), 1) || 1;
+    return computeOrgCosts(project, schedule, nb);
+  }, [project, schedule, batchResult]);
+  const simValue = useMemo(() => ({ durationMap, massFlowResult, sortedSteps: sortedArr, cycleIds, costResult, schedule, greenMetrics, batchResult, orgCostResult }),
+    [durationMap, massFlowResult, sortedArr, cycleIds, costResult, schedule, greenMetrics, batchResult, orgCostResult]);
 
   return (
     <SimContext.Provider value={simValue}>
@@ -7581,6 +8580,7 @@ function App() {
             {activeTab === "balance" && <MassBalanceTab project={project} onJumpToStep={(stepId) => { setActiveTab("process"); setFocusStepId(stepId); }} />}
             {activeTab === "gantt" && <GanttTab project={project} />}
             {activeTab === "cost" && <CostTab project={project} />}
+            {activeTab === "orgcosts" && <OrgCostsTab project={project} dispatch={dispatch} />}
             {activeTab === "bom" && <BomTab project={project} />}
             {activeTab === "pfd" && <PfdTab project={project} dispatch={dispatch} />}
           </div>
