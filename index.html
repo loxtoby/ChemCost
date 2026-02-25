@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ChemCost v53</title>
+  <title>ChemCost v59</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <!-- reactflow CSS (unpkg; cdnjs does not carry this package -- do not migrate) -->
   <link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css" />
@@ -14,28 +14,12 @@
   <!-- Confirmed UMD global: window.ReactFlow (namespace object); component is window.ReactFlow.ReactFlow -->
   <!-- Secondary CDN if unpkg unavailable: https://cdn.jsdelivr.net/npm/reactflow@11.11.4/dist/umd/index.js -->
   <script src="https://unpkg.com/reactflow@11.11.4/dist/umd/index.js"></script>
-  <script>
-// === SmilesDrawer (CC-042): inline library ===
-/* smiles-drawer shim -- placeholder when real library unavailable */
-(function(root){
-  function SD(opts){ this.opts=opts||{}; }
-  SD.prototype.draw = function(smiles, canvas, theme, cb){
-    if(canvas && canvas.getContext){
-      var ctx=canvas.getContext('2d');
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle='#f5f5f5';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle='#aaa';
-      ctx.font='11px sans-serif';
-      ctx.textAlign='center';
-      ctx.fillText(smiles?smiles.slice(0,18):'(no structure)',canvas.width/2,canvas.height/2);
-    }
-    if(typeof cb==='function') cb();
-  };
-  root.SmilesDrawer = SD;
-})(window||this);
-
-  </script>
+  <!-- html2canvas: PFD PNG export (v57+). Loaded at parse time; export button is disabled until ready. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- SmilesDrawer (v58): CDN primary load. If smiles-drawer.min.js is present locally,
+       build.py injects it inline as a follow-up override block (enables offline use).
+       If CDN also fails, SmilesRenderer falls back to PubChem server-side PNG images. -->
+  <script src="https://unpkg.com/smiles-drawer@2.1.7/dist/smiles-drawer.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -61,10 +45,10 @@
     const { useState, useCallback, useEffect, useRef, createContext, useContext, useMemo } = React;
 
 
-// ---- data_v53.js ----
+// ---- data_v59.js ----
 
 // =============================================================================
-// === data.js -- v51: Static configuration and Icon component =================
+// === data.js -- v59: Static configuration and Icon component =================
 // =============================================================================
 // This file contains:
 //   - Schema version and constants
@@ -282,10 +266,10 @@ function Icon({ name, size = 14, color }) {
 }
 
 
-// ---- models_v53.js ----
+// ---- models_v59.js ----
 
 // =============================================================================
-// === models.js -- v51: Core math, engines, and state management ==============
+// === models.js -- v59: Core math, engines, and state management ==============
 // =============================================================================
 // Depends on: data.js (constants must be loaded first)
 // This file contains:
@@ -910,7 +894,9 @@ async function fetchCompoundFromChEMBL(query) {
     if (resA.ok) {
       const dataA = await resA.json();
       if (dataA.molecules && dataA.molecules.length > 0) {
-        return extractMol(dataA.molecules[0]);
+        const result = extractMol(dataA.molecules[0]);
+        if (result) result.smiles = await canonicalizeSmiles(result.smiles);
+        return result;
       }
     }
 
@@ -924,7 +910,9 @@ async function fetchCompoundFromChEMBL(query) {
           const resC = await fetch(`${BASE}/molecule/${encodeURIComponent(chemblId)}?format=json`, { headers });
           if (resC.ok) {
             const mol = await resC.json();
-            return extractMol(mol);
+            const result = extractMol(mol);
+            if (result) result.smiles = await canonicalizeSmiles(result.smiles);
+            return result;
           }
         }
       }
@@ -935,6 +923,37 @@ async function fetchCompoundFromChEMBL(query) {
   } catch (err) {
     // Re-throw so the caller's .catch() sets lookup status to "error"
     throw err;
+  }
+}
+
+// canonicalizeSmiles(rawSmiles) -- async helper to obtain the PubChem canonical SMILES form.
+//
+// RATIONALE: SmilesDrawer is sensitive to SMILES notation. ChEMBL returns its own canonical
+// form (e.g. "Clc1cncc(Cl)n1" for 2,6-dichloropyrazine) which SmilesDrawer may fail to parse,
+// while the PubChem canonical form ("c1cnc(nc1Cl)Cl") renders correctly. Canonicalizing at
+// ingest time means stored SMILES are always the PubChem preferred form.
+//
+// Calls PubChem PUG REST: POST /compound/smiles/property/CanonicalSMILES/TXT
+// Returns the canonical string on success, or rawSmiles unchanged on any failure
+// (network error, invalid SMILES, or offline) so the caller is never blocked.
+async function canonicalizeSmiles(rawSmiles) {
+  if (!rawSmiles || typeof rawSmiles !== "string") return rawSmiles || "";
+  const s = rawSmiles.trim();
+  if (!s) return s;
+  try {
+    const body = "smiles=" + encodeURIComponent(s);
+    const res = await fetch(
+      "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/property/CanonicalSMILES/TXT",
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }
+    );
+    if (!res.ok) return s; // non-2xx means invalid SMILES or server error; keep original
+    const text = (await res.text()).trim();
+    // PUG REST TXT output is just the value on a single line; guard against HTML error pages
+    if (!text || text.includes("<") || text.includes("Status")) return s;
+    return text;
+  } catch (_) {
+    // Network/CORS error (offline); degrade gracefully
+    return s;
   }
 }
 
@@ -980,10 +999,12 @@ async function fetchCompoundFromCIR(query) {
   if (!mwText && !smilesText) return null;
 
   const mw = mwText ? parseFloat(mwText) : null;
+  // CIR returns non-canonical SMILES; canonicalize via PubChem so SmilesDrawer prefers it.
+  const canonSmiles = smilesText ? await canonicalizeSmiles(smilesText) : "";
   return {
     title: q,
     molecularWeight: mw && isFinite(mw) ? mw : null,
-    smiles: smilesText || "",
+    smiles: canonSmiles || "",
     density: null, // CIR does not provide density
   };
 }
@@ -3093,23 +3114,106 @@ const SimContext = createContext({
   batchResult: null, orgCostResult: null,
 });
 
+// =============================================================================
+// === PROJECT CSV EXPORT (v55, unchanged) =================================================
+// =============================================================================
+// buildProjectCsvSections: pure data-assembly helper extracted from OverviewTab's
+// handleExportProjectCSV. Returns a nested array of row arrays that can be
+// serialized to CSV. The DOM parts (Blob, download) stay in the UI layer.
+// This separation makes the export logic independently testable.
+// =============================================================================
 
-// ---- ui_v53.js ----
+function buildProjectCsvSections(project, costResult, greenMetrics, massFlowResult, batchResult) {
+  const sections = [];
+  const gm = greenMetrics || {};
+
+  // Project metadata
+  sections.push(["# Project", project.name || ""]);
+  sections.push(["Schema Version", SCHEMA_VERSION]);
+  sections.push([]);
+
+  // Cost summary
+  const { totalBatchCost = 0, byCategory = {}, byStep = [] } = costResult || {};
+  sections.push(["# Cost Summary"]);
+  sections.push(["Total Batch Cost ($)", "Materials ($)", "Equipment ($)", "Labor ($)"]);
+  sections.push([totalBatchCost, byCategory.materials ?? 0, byCategory.equipment ?? 0, byCategory.labor ?? 0]);
+  sections.push([]);
+  if (byStep.length > 0) {
+    sections.push(["# Cost by Step"]);
+    sections.push(["Step", "Materials ($)", "Equipment ($)", "Labor ($)", "Total ($)"]);
+    byStep.forEach(r => sections.push([r.stepName, r.materialCost, r.equipmentCost, r.laborCost, r.total]));
+    sections.push([]);
+  }
+
+  // Green chemistry metrics
+  sections.push(["# Green Chemistry Metrics"]);
+  const { totalMassIn = 0, productMassOut = 0, pmi: gPmi = null,
+    wasteKg = 0, aqueousWasteKg = 0, organicWasteKg = 0 } = gm;
+  sections.push(["PMI", "Total Mass In (kg)", "Product Mass Out (kg)", "Waste (kg)", "Aqueous Waste (kg)", "Organic Waste (kg)"]);
+  sections.push([gPmi ?? "N/A", totalMassIn, productMassOut, wasteKg, aqueousWasteKg, organicWasteKg]);
+  sections.push([]);
+
+  // Mass balance by step
+  const { stepBalances = [] } = massFlowResult || {};
+  if (stepBalances.length > 0) {
+    sections.push(["# Mass Balance by Step"]);
+    sections.push(["Step", "Mass In (kg)", "Mass Out (kg)", "Balance Flag"]);
+    stepBalances.forEach(b => {
+      sections.push([b.stepName || b.stepId, b.massIn ?? "", b.massOut ?? "", b.flagged ? "flagged" : "ok"]);
+    });
+    sections.push([]);
+  }
+
+  // Batch sizing
+  if (batchResult?.dagBatchCounts) {
+    const counts = batchResult.dagBatchCounts;
+    const stepIds = Object.keys(counts);
+    if (stepIds.length > 0) {
+      sections.push(["# Batch Sizing"]);
+      sections.push(["Step ID", "Step Name", "Batches Required"]);
+      stepIds.forEach(sid => {
+        const st = (project.steps || []).find(s => s.id === sid);
+        sections.push([sid, st?.name || sid, counts[sid]]);
+      });
+      sections.push([]);
+    }
+  }
+
+  // Bill of materials
+  const { bom = [] } = costResult || {};
+  const materialById = Object.fromEntries((project.materials || []).map(m => [m.id, m]));
+  if (bom.length > 0) {
+    sections.push(["# Bill of Materials"]);
+    sections.push(["Material Name", "Type", "Per Batch (kg)", "Unit Cost ($/kg)", "Per Batch Cost ($)"]);
+    bom.forEach(r => {
+      const mat = materialById[r.materialId];
+      sections.push([r.materialName, mat?.type ?? "", r.totalKg, r.unitCostPerKg > 0 ? r.unitCostPerKg : "", r.lineCost > 0 ? r.lineCost : ""]);
+    });
+    sections.push([]);
+  }
+
+  return sections;
+}
+
+
+// ---- core_v59.js ----
 
 // =============================================================================
-// === ui.js -- v51: React components, tab views, and app layout ==============
+// === core.js -- v59: Design tokens, formatters, shared atoms, process editor
 // =============================================================================
-// Depends on: data.js, models.js (all constants and engine functions loaded first)
-// This file contains:
-//   - Design tokens (C, MONO)
-//   - Base components: Btn, CalcPopover, CalcInfoIcon, TemplateField, etc.
-//   - All tab views: ProcessEditorTab, MaterialsTab, EquipmentTab, OrgCostsTab, etc.
-//   - Root App component (export default)
-//
-// v51: ChEMBL exact-match SMILES fix; Consumables section in EquipmentTab;
-//      packaging op consumable selector; consumables in BOM; OrgCosts tab;
-//      Labor Rates moved from ConfigurationTab to OrgCostsTab.
+// Depends on: data.js, models.js (load those first)
+// Contains:
+//   - Design tokens (C, MONO, TBL) and shared constants
+//   - Smart formatters (fmtSig, fmtKgSig, fmtLSig, fmtDurationSig, etc.)
+//   - Shared utilities (deriveBatchScaling, lookup helpers)
+//   - SmilesRenderer (CC-042): 2D structure from SMILES via SmilesDrawer
+//   - Shared UI atoms: Btn, CalcPopover, CalcInfoIcon, TemplateField, etc.
+//   - Operation-type renderers (renderAddition, renderReaction, etc.)
+//   - StepCard, StepStoichCard, composite/upstream editor components
+//   - Toolbar, Sidebar, SummaryBar, ProcessEditorTab
+//   - OperationPickerModal, LoadValidationModal, IssueRow
 // =============================================================================
+
 
 // === DESIGN TOKENS ===========================================================
 // =============================================================================
@@ -3251,9 +3355,12 @@ function lookupCompoundInEntries(entries, query) {
   )) || null;
 }
 
-// Derive batch-scaling values from a SimContext batchResult.
+// deriveBatchScaling: shared helper consumed by BOTH CostTab and BomTab.
+// Both tabs need the same scale factor and per-material scaled kg values so that
+// the "Per Campaign" column is always consistent. If called from two separate
+// places with the same batchResult reference, the result is identical -- having it
+// here (rather than inlined twice) prevents the two tabs from drifting.
 // Returns { sf, scaledBomMap, showScaled, totalBatches, hasBatchSizing }.
-// Shared between CostTab and BomTab.
 function deriveBatchScaling(batchResult) {
   const sf = batchResult?.scaleFactor ?? null;
   const scaledBomMap = {};
@@ -3276,30 +3383,50 @@ function deriveBatchScaling(batchResult) {
 // =============================================================================
 
 function SmilesRenderer({ smiles, width = 180, height = 120, theme = "light" }) {
-  // CC-042 fix (v34): SmilesDrawer draws to a <canvas> element, not <img>.
-  // Using a canvas ref ensures the library has a valid draw target.
+  // v54 fix: real SmilesDrawer v2.1.7 exposes SmilesDrawer.Drawer (constructor) and
+  // SmilesDrawer.parse(smiles, successFn, failFn). The old code used "SmiDrawer" which
+  // was never defined, so typeof check always fell through to the "N/A" fallback.
+  //
+  // v58 fix: SMILES sanitization (trim + printable-ASCII guard) prevents hidden whitespace
+  // from causing SmilesDrawer parse errors. PubChem image API is used as a fallback when
+  // SmilesDrawer is unavailable or fails -- this handles all online deployments (GitHub Pages)
+  // without requiring the bundled library.
   const canvasRef = useRef(null);
-  const [error, setError] = useState(false);
+  const [drawError, setDrawError] = useState(false);
+
+  // Check availability: SmilesDrawer must be a namespace with Drawer + parse.
+  const sdAvailable = typeof SmilesDrawer !== "undefined" && SmilesDrawer.Drawer && SmilesDrawer.parse;
+
+  // Sanitize: trim surrounding whitespace and reject strings with non-printable-ASCII bytes.
+  // Hidden whitespace from copy-paste or API responses causes SmilesDrawer parse failures.
+  const cleanSmiles = (() => {
+    if (!smiles) return "";
+    const s = String(smiles).trim();
+    return /^[\x20-\x7E]+$/.test(s) ? s : "";
+  })();
 
   useEffect(() => {
-    if (!smiles || typeof SmiDrawer === "undefined" || !canvasRef.current) {
-      setError(false);
+    if (!cleanSmiles || !sdAvailable || !canvasRef.current) {
+      setDrawError(false);
       return;
     }
-    setError(false);
+    setDrawError(false);
     try {
-      const sd = new SmiDrawer({ width, height });
-      sd.draw(smiles, canvasRef.current, theme, () => { setError(false); }, () => {
+      const drawer = new SmilesDrawer.Drawer({ width, height });
+      SmilesDrawer.parse(cleanSmiles, (tree) => {
+        drawer.draw(tree, canvasRef.current, theme, false);
+        setDrawError(false);
+      }, (err) => {
         // Log the offending SMILES to aid debugging without surfacing noise to the user.
-        console.warn("SmilesRenderer: SmiDrawer parse error for SMILES:", smiles);
-        setError(true);
+        console.warn("SmilesRenderer: parse error for SMILES:", cleanSmiles, err);
+        setDrawError(true);
       });
     } catch (_) {
-      setError(true);
+      setDrawError(true);
     }
-  }, [smiles, width, height, theme]);
+  }, [cleanSmiles, width, height, theme, sdAvailable]);
 
-  if (!smiles) {
+  if (!cleanSmiles) {
     return (
       <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <span style={{ fontSize: "9px", color: C.midDark, fontFamily: MONO }}>No SMILES</span>
@@ -3307,24 +3434,28 @@ function SmilesRenderer({ smiles, width = 180, height = 120, theme = "light" }) 
     );
   }
 
-  if (typeof SmiDrawer === "undefined") {
+  // When SmilesDrawer is not available or parse fails, fall back to PubChem's server-side
+  // structure renderer. Works for any valid SMILES and requires no additional JS library.
+  // encodeURIComponent handles SMILES special chars (#, +, /, @, etc.).
+  if (!sdAvailable || drawError) {
+    const pubchemUrl = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(cleanSmiles)}/PNG?image_size=${width}x${height}`;
     return (
-      <div style={{ width, height, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
-        <span style={{ fontSize: "9px", color: C.midDark, fontFamily: MONO }}>SmiDrawer N/A</span>
-        <span style={{ fontSize: "8px", color: C.blue, fontFamily: MONO, maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{smiles}</span>
+      <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff" }}>
+        <img
+          src={pubchemUrl}
+          alt={cleanSmiles}
+          width={width}
+          height={height}
+          style={{ objectFit: "contain" }}
+          onError={e => { e.currentTarget.style.display = "none"; }}
+        />
       </div>
     );
   }
 
   return (
     <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-      <canvas ref={canvasRef} width={width} height={height} style={{ display: error ? "none" : "block" }} />
-      {error && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-          <span style={{ fontSize: "9px", color: C.orange, fontFamily: MONO }}>Parse error</span>
-          <span style={{ fontSize: "8px", color: C.midDark, fontFamily: MONO, maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{smiles.length > 22 ? smiles.slice(0, 20) + ".." : smiles}</span>
-        </div>
-      )}
+      <canvas ref={canvasRef} width={width} height={height} />
     </div>
   );
 }
@@ -4822,6 +4953,841 @@ function SummaryBar({ project }) {
   );
 }
 
+// ---- pfd_v59.js ----
+
+// =============================================================================
+// === pfd.js -- v59: Process Flow Diagram components (React Flow)
+// =============================================================================
+// Depends on: data.js, models.js, core.js (load all before this file)
+// Contains:
+//   - PfdMatNodeRF: material detail card node with React Flow handles (v53)
+//   - PfdStepEdgeRF: custom step edge with yield label; curved/straight toggle (v56)
+//   - PFD_UNIFIED_NODE_TYPES / PFD_UNIFIED_EDGE_TYPES: module-scope registries
+//   - PfdUnifiedGraph: single-canvas unified PFD (v53); curvedEdges prop (v56)
+//   - computePfdLayout: auto-layout for linear/convergent syntheses;
+//       improved multi-arm row spacing (v56)
+//   - exportPfdSvg: pure-JS SVG export; no external dependencies (v56)
+//   - exportPfdPng: PNG export via html2canvas CDN (v57)
+//   - PfdTab: tab wrapper with curved-edges toggle, SVG export, PNG export (v57)
+// =============================================================================
+
+
+// =============================================================================
+// === PFD LAYOUT HELPERS ======================================================
+// =============================================================================
+
+// === UNIFIED PFD CANVAS (v53) ================================================
+// Single React Flow canvas: material detail cards as nodes, steps as edges.
+// PfdMatNodeRF: full material card with connection handles (input left, output right).
+// PfdStepEdgeRF: custom edge with editable step name + yield label; supports both
+//   straight (getStraightPath) and curved (getBezierPath) routing (v56 toggle).
+// Replaces the prior two-canvas system (PfdNodeGraph + PfdDetailGraph).
+// Node visibility: only "input", "intermediate", "output" material types shown.
+// Position keys: "p:{matId}" (old "s:", "m:", "dm:" keys are silently ignored).
+// =============================================================================
+
+// PfdMatNodeRF -- full material detail card with React Flow handles (v53).
+// Content mirrors PfdDetailNodeRF from the prior version; adds Handle on left (target) and right (source).
+// Editable fields: MW (click), Assay (click), Weight (product only, click).
+// All edits dispatch to project state via data.dispatch.
+function PfdMatNodeRF({ data }) {
+  if (typeof ReactFlow === "undefined") {
+    return <div style={{ padding: "8px 12px", border: "2px solid #888", borderRadius: "8px", background: "#fff", fontSize: "12px" }}>
+      {data.mat ? data.mat.name : "Material"}
+    </div>;
+  }
+  const { Handle, Position } = ReactFlow;
+
+  const {
+    mat, mw, assay, moles, weightKg, isProduct, isProducedByProductStep,
+    armColor, targetMass, dispatch, blendNames, smiles, compoundById,
+  } = data;
+
+  const [mwEdit, setMwEdit] = React.useState(null);
+  const [assayEdit, setAssayEdit] = React.useState(null);
+  const [wgtEdit, setWgtEdit] = React.useState(null);
+
+  const CW = 214, CH = 236, SH = 84;
+  const firstCmpId = (mat?.composition || [])[0]?.compoundId;
+  const smilesRaw = String(smiles || "").trim();
+  const cardStroke = isProducedByProductStep ? 2.5 : 1.5;
+  const isBlend = blendNames && blendNames.length > 0;
+  const name = mat?.name ?? "(no material)";
+
+  function commitMw(raw) {
+    const n = parseFloat(raw);
+    if (!isNaN(n) && n > 0 && firstCmpId) {
+      dispatch(p => updateCompound(p, firstCmpId, { molecularWeight: parseFloat(n.toFixed(4)) }));
+    }
+    setMwEdit(null);
+  }
+  function commitAssay(raw) {
+    const n = parseFloat(raw);
+    if (!isNaN(n) && n >= 0 && n <= 100 && mat) {
+      const entry = (mat.composition || [])[0];
+      if (entry) {
+        const rebalanced = rebalanceCompositionFractions(mat.composition, entry.compoundId, parseFloat((n / 100).toFixed(6)));
+        dispatch(p => updateMaterial(p, mat.id, { composition: rebalanced }));
+      }
+    }
+    setAssayEdit(null);
+  }
+  function commitWeight(raw) {
+    const n = parseFloat(raw);
+    if (!isNaN(n) && n > 0) {
+      dispatch(p => setTargetOutputMass(p, n));
+    }
+    setWgtEdit(null);
+  }
+
+  const fPct = v => v == null ? "--" : v.toFixed(1) + "%";
+  const fMolDisplay = (mol, mwVal) => {
+    if (mol == null || mwVal == null) return "--";
+    return mol < 0.1 ? fmtSig(mol * 1000, 3) + " mmol" : fmtSig(mol, 3) + " mol";
+  };
+
+  return (
+    <div style={{
+      width: CW, height: CH,
+      border: `${cardStroke}px solid ${armColor}`,
+      borderRadius: 8, background: "#fff",
+      boxShadow: isProducedByProductStep ? ("0 2px 14px " + armColor + "44") : "0 1px 6px rgba(0,0,0,0.10)",
+      display: "flex", flexDirection: "column", overflow: "visible",
+      fontFamily: "system-ui,-apple-system,'Segoe UI',sans-serif",
+    }}>
+      {/* Left handle (target) -- materials receive flow from upstream steps */}
+      <Handle type="target" position={Position.Left}
+        style={{ background: armColor, width: 10, height: 10, border: "2px solid #fff", left: -6 }} />
+
+      {/* SMILES or blend names top panel */}
+      <div style={{
+        height: SH, background: armColor + "12",
+        borderBottom: "1px solid " + armColor + "28",
+        borderRadius: "6px 6px 0 0",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        overflow: "hidden", padding: isBlend ? "6px 8px" : 0,
+      }}>
+        {isBlend ? (
+          <div style={{ width: "100%" }}>
+            <div style={{ fontSize: "9px", color: armColor, fontWeight: 700, marginBottom: "4px" }}>Blend:</div>
+            {blendNames.map((n, i) => (
+              <div key={i} style={{ fontSize: "9px", color: "#333",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n}</div>
+            ))}
+          </div>
+        ) : (
+          <SmilesRenderer smiles={smilesRaw || null} width={CW - 20} height={SH - 8} />
+        )}
+      </div>
+
+      {/* Property grid */}
+      <div style={{ flex: 1, padding: "6px 9px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{
+          fontSize: "11px", fontWeight: 700, color: "#222",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          paddingBottom: 4, borderBottom: "1px solid #e8e8e8", marginBottom: 3,
+        }} title={name}>{name}</div>
+
+        {/* MW */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+          fontSize: "11px", padding: "2px 0", borderBottom: "1px solid #f0f0f0" }}>
+          <span style={{ color: "#666" }}>MW</span>
+          {mwEdit !== null ? (
+            <input type="number" step="any" min="0" value={mwEdit}
+              onChange={e => setMwEdit(e.target.value)}
+              onBlur={e => commitMw(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") commitMw(mwEdit); if (e.key === "Escape") setMwEdit(null); }}
+              style={{ width: 72, fontSize: "11px", fontFamily: MONO, border: "none",
+                borderBottom: "1px solid " + C.orange, outline: "none", background: "transparent",
+                color: "#222", textAlign: "right" }} autoFocus />
+          ) : (
+            <span onClick={firstCmpId ? () => setMwEdit(mw != null ? String(mw) : "") : undefined}
+              title={firstCmpId ? "Click to edit MW" : ""}
+              style={{ fontFamily: MONO, fontSize: "11px",
+                color: firstCmpId ? "#222" : "#999",
+                cursor: firstCmpId ? "text" : "default",
+                borderBottom: firstCmpId ? "1px dashed #888" : "none" }}>
+              {mw != null ? mw + " g/mol" : "--"}
+            </span>
+          )}
+        </div>
+
+        {/* Moles */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+          fontSize: "11px", padding: "2px 0", borderBottom: "1px solid #f0f0f0" }}>
+          <span style={{ color: "#666" }}>Moles</span>
+          <span style={{ fontFamily: MONO, color: "#222" }}>{fMolDisplay(moles, mw)}</span>
+        </div>
+
+        {/* Assay */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+          fontSize: "11px", padding: "2px 0", borderBottom: "1px solid #f0f0f0" }}>
+          <span style={{ color: "#666" }}>Assay</span>
+          {assayEdit !== null ? (
+            <input type="number" step="any" min="0" max="100" value={assayEdit}
+              onChange={e => setAssayEdit(e.target.value)}
+              onBlur={e => commitAssay(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") commitAssay(assayEdit); if (e.key === "Escape") setAssayEdit(null); }}
+              style={{ width: 72, fontSize: "11px", fontFamily: MONO, border: "none",
+                borderBottom: "1px solid " + C.orange, outline: "none", background: "transparent",
+                color: "#222", textAlign: "right" }} autoFocus />
+          ) : (
+            <span onClick={(mat?.composition?.length > 0) ? () => setAssayEdit(assay != null ? String(assay.toFixed(2)) : "") : undefined}
+              title={(mat?.composition?.length > 0) ? "Click to edit assay %" : ""}
+              style={{ fontFamily: MONO, fontSize: "11px",
+                color: (mat?.composition?.length > 0) ? "#222" : "#999",
+                cursor: (mat?.composition?.length > 0) ? "text" : "default",
+                borderBottom: (mat?.composition?.length > 0) ? "1px dashed #888" : "none" }}>
+              {fPct(assay)}
+            </span>
+          )}
+        </div>
+
+        {/* Weight -- editable for product node */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+          fontSize: "11px", padding: "2px 0" }}>
+          <span style={{ color: "#666" }}>Weight</span>
+          {isProducedByProductStep ? (
+            wgtEdit !== null ? (
+              <input value={wgtEdit}
+                onChange={e => setWgtEdit(e.target.value)}
+                onBlur={e => commitWeight(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") commitWeight(wgtEdit); if (e.key === "Escape") setWgtEdit(null); }}
+                style={{ width: 80, fontSize: "11px", fontFamily: MONO, border: "none",
+                  borderBottom: "1px solid " + C.blue, outline: "none", background: "transparent",
+                  color: "#222", textAlign: "right" }} autoFocus />
+            ) : (
+              <span onClick={() => setWgtEdit(String(targetMass ?? weightKg ?? ""))}
+                title="Click to set target batch weight"
+                style={{ fontFamily: MONO, fontSize: "11px", color: C.blue, fontWeight: 600,
+                  borderBottom: "1px dashed " + C.blue, cursor: "text" }}>
+                {targetMass != null ? targetMass.toFixed(2) + " kg" : fmtKgSig(weightKg)}
+              </span>
+            )
+          ) : (
+            <span style={{ fontFamily: MONO, fontSize: "11px", color: "#999" }}>{fmtKgSig(weightKg)}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Right handle (source) -- materials feed into downstream steps */}
+      <Handle type="source" position={Position.Right}
+        style={{ background: armColor, width: 10, height: 10, border: "2px solid #fff", right: -6 }} />
+    </div>
+  );
+}
+
+// PfdStepEdgeRF -- custom edge rendering a step name + editable yield between material nodes (v53).
+// v56: supports both straight (getStraightPath) and curved (getBezierPath) routing.
+//   data.curvedEdges === true -> bezier; false/undefined -> straight (default).
+function PfdStepEdgeRF({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd }) {
+  if (typeof ReactFlow === "undefined") return null;
+  const { getStraightPath, getBezierPath, EdgeLabelRenderer, BaseEdge } = ReactFlow;
+  const { stepName, yieldPct, armColor, dispatch, stepId, curvedEdges } = data;
+
+  const [yieldEdit, setYieldEdit] = React.useState(null);
+
+  // Use bezier for curved mode; straight for default.
+  // getStraightPath ignores sourcePosition/targetPosition; getBezierPath uses them for handle curvature.
+  const pathArgs = curvedEdges
+    ? [{ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }]
+    : [{ sourceX, sourceY, targetX, targetY }];
+  const pathFn = curvedEdges ? getBezierPath : getStraightPath;
+  const [edgePath, labelX, labelY] = pathFn(...pathArgs);
+
+  function commitYield(raw) {
+    const n = parseFloat(raw);
+    if (!isNaN(n) && n >= 0 && n <= 100) {
+      dispatch(p => updateStep(p, stepId, { yield: parseFloat(n.toFixed(2)) }));
+    }
+    setYieldEdit(null);
+  }
+
+  const displayName = stepName && stepName.length > 26 ? stepName.slice(0, 24) + ".." : (stepName || "");
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath}
+        style={{ stroke: armColor, strokeWidth: 2, opacity: 0.85 }}
+        markerEnd={markerEnd} />
+      <EdgeLabelRenderer>
+        <div style={{
+          position: "absolute",
+          transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+          pointerEvents: "all",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+          zIndex: 1,
+        }}>
+          <div style={{
+            fontSize: "10px", fontWeight: 600, color: "#222",
+            background: "rgba(250,249,245,0.92)",
+            padding: "1px 5px", borderRadius: 3, whiteSpace: "nowrap",
+          }}>{displayName}</div>
+          {yieldEdit !== null ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 3,
+              background: "#fff", border: "1px solid #ddd", borderRadius: 4,
+              padding: "2px 6px", boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}>
+              <span style={{ fontSize: "10px", color: "#666", fontFamily: MONO }}>Yield:</span>
+              <input type="number" min={0} max={100} step={0.1} value={yieldEdit}
+                onChange={e => setYieldEdit(e.target.value)}
+                onBlur={e => commitYield(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") commitYield(yieldEdit); if (e.key === "Escape") setYieldEdit(null); }}
+                style={{ width: 46, fontSize: "11px", fontFamily: MONO, border: "none",
+                  outline: "none", background: "transparent", color: "#222", textAlign: "right" }}
+                autoFocus />
+              <span style={{ fontSize: "10px", color: "#666", fontFamily: MONO }}>%</span>
+            </div>
+          ) : (
+            <div onClick={() => setYieldEdit(yieldPct != null ? String(yieldPct) : "")}
+              title="Click to edit yield"
+              style={{ fontSize: "11px", color: C.green, fontFamily: MONO, fontWeight: 600,
+                cursor: "text", background: "rgba(250,249,245,0.85)",
+                padding: "1px 5px", borderRadius: 3, borderBottom: "1px dashed " + C.green }}>
+              Yield: {yieldPct != null ? yieldPct + "%" : "--"}
+            </div>
+          )}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+// Module-scope type registries -- prevents React Flow from re-creating on each render.
+const PFD_UNIFIED_NODE_TYPES = { pfdMatNode: PfdMatNodeRF };
+const PFD_UNIFIED_EDGE_TYPES = { pfdStepEdge: PfdStepEdgeRF };
+
+// PfdUnifiedGraph -- single React Flow canvas for the PFD tab (v53).
+// Materials (input/intermediate/output types only) are nodes; steps are edges.
+// Node positions keyed "p:{matId}"; old "s:", "m:", "dm:" keys are silently ignored.
+// v56: accepts curvedEdges prop (boolean); when true, edges use getBezierPath.
+//      accepts exportRef: React.MutableRefObject assigned to an ()->{} export callback.
+// v57: accepts pngContainerRef: React.MutableRefObject attached to the canvas wrapper div
+//      for html2canvas PNG export.
+function PfdUnifiedGraph({ project, dispatch, curvedEdges, exportRef, pngContainerRef }) {
+  if (typeof ReactFlow === "undefined" || !ReactFlow.ReactFlow) {
+    return (
+      <div style={{ padding: "32px", textAlign: "center", color: C.midDark }}>
+        PFD canvas unavailable -- React Flow library did not load.
+        Check your network connection and reload the page.
+      </div>
+    );
+  }
+
+  const { ReactFlow: RF, Background, Controls, MiniMap,
+          useNodesState, useEdgesState, MarkerType } = ReactFlow;
+
+  const { sortedSteps, massFlowResult, batchResult } = useContext(SimContext);
+  const nodePositions = project.pfdNodePositions || {};
+
+  const compoundById = useMemo(() =>
+    Object.fromEntries((project.compounds || []).map(c => [c.id, c])),
+    [project.compounds]
+  );
+
+  const productStep = Array.isArray(sortedSteps) && sortedSteps.length > 0
+    ? sortedSteps[sortedSteps.length - 1] : null;
+  const targetMass = project.batchSizingConfig?.targetMass ?? null;
+
+  // Strict type filter: only input/intermediate/output materials are shown.
+  // Solvents and waste are bookkeeping entries, not primary flow nodes.
+  const VISIBLE_TYPES = new Set(["input", "intermediate", "output"]);
+
+  const { derivedNodes, derivedEdges } = useMemo(() => {
+    const steps = Array.isArray(sortedSteps) ? sortedSteps : [];
+    if (steps.length === 0) return { derivedNodes: [], derivedEdges: [] };
+
+    let layout = null;
+    try { layout = computePfdLayout(project, steps); } catch (_) {}
+
+    const { depthOf = {}, rowOf = {}, armColorOf = {}, ARM_COLORS = [] } = layout || {};
+    const CW = 214, CH = 236, HG = 220, VG = 68, PAD = 36;
+    const cX = col => PAD + col * (CW + HG);
+    const cY = row => PAD + row * (CH + VG);
+
+    const matById = Object.fromEntries((project.materials || []).map(m => [m.id, m]));
+
+    function matMW(mat) {
+      if (!mat) return null;
+      for (const e of (mat.composition || [])) {
+        const c = compoundById[e.compoundId];
+        if (c?.molecularWeight) return c.molecularWeight;
+      }
+      return null;
+    }
+    function matAssay(mat) {
+      if (!mat) return null;
+      const e = (mat.composition || [])[0];
+      return e ? e.fraction * 100 : null;
+    }
+    function stepOutputMass(stepId) {
+      const out = massFlowResult?.stepOutputMassByStepId?.[stepId];
+      return Number.isFinite(out) ? out : null;
+    }
+
+    const rfNodes = [];
+    const addedMatIds = new Set();
+
+    function addMatNode(matId, col, row, armColor, isProduct, isProducedByProductStep) {
+      if (addedMatIds.has(matId)) return;
+      const mat = matById[matId];
+      // Strict type filter: only render input/intermediate/output materials.
+      if (!mat || !VISIBLE_TYPES.has(mat.type)) return;
+      addedMatIds.add(matId);
+
+      const entries = (mat.composition) || [];
+      const mw = matMW(mat);
+      const assay = matAssay(mat);
+      const assayFactor = assay != null ? assay / 100 : 1;
+      const weightKg = isProducedByProductStep
+        ? stepOutputMass(productStep?.id)
+        : (entries.length > 0 ? stepOutputMass(steps.find(s => s.intermediateOutputMaterialId === matId)?.id) : null);
+      const moles = (weightKg != null && mw != null) ? (weightKg * assayFactor * 1000 / mw) : null;
+      const blendNames = entries.length > 1
+        ? entries.map(e => compoundById[e.compoundId]?.name || e.compoundId)
+        : null;
+      const firstCmpId = entries.length > 0 ? entries[0].compoundId : null;
+      const smiles = firstCmpId ? (compoundById[firstCmpId]?.smiles || "") : "";
+
+      const posKey = "p:" + matId;
+      const defaultPos = { x: cX(col), y: cY(row) };
+      const pos = nodePositions[posKey] ?? defaultPos;
+
+      rfNodes.push({
+        id: posKey,
+        type: "pfdMatNode",
+        position: pos,
+        draggable: true,
+        data: {
+          mat, compoundById, mw, assay, moles, weightKg,
+          isProduct, isProducedByProductStep, armColor,
+          targetMass: isProducedByProductStep ? targetMass : null,
+          dispatch, blendNames, smiles,
+        },
+      });
+    }
+
+    // Step output nodes: col = depthOf[step] + 1
+    steps.forEach(step => {
+      const col = (depthOf[step.id] ?? 0) + 1;
+      const row = rowOf[step.id] ?? 0;
+      const armColor = armColorOf[step.id] || ARM_COLORS[0] || C.blue;
+      if (step.intermediateOutputMaterialId) {
+        const isProducedByProductStep = !!(productStep && step.id === productStep.id);
+        const mat = matById[step.intermediateOutputMaterialId];
+        const isProduct = mat?.type === "output" || isProducedByProductStep;
+        addMatNode(step.intermediateOutputMaterialId, col, row, armColor, isProduct, isProducedByProductStep);
+      }
+    });
+
+    // Root step input nodes: col = 0 (to the left of root steps).
+    // Use all addition op materials that pass the type filter.
+    const rootSteps = steps.filter(s => (s.upstreamStepIds || []).length === 0);
+    rootSteps.forEach(step => {
+      const row = rowOf[step.id] ?? 0;
+      const armColor = armColorOf[step.id] || ARM_COLORS[0] || C.blue;
+      const addOps = (project.operations || []).filter(o => o.stepId === step.id && o.type === "addition" && o.materialId);
+      addOps.forEach((op, oi) => {
+        addMatNode(op.materialId, 0, row + oi * 0.4, armColor, false, false);
+      });
+    });
+
+    // Edges: one per step->upstream connection (step as labeled arrow between material nodes).
+    const rfEdges = [];
+    steps.forEach(step => {
+      const armColor = armColorOf[step.id] || ARM_COLORS[0] || C.blue;
+      const toMatId = step.intermediateOutputMaterialId;
+      if (!toMatId || !addedMatIds.has(toMatId)) return;
+      const targetNodeId = "p:" + toMatId;
+
+      if ((step.upstreamStepIds || []).length === 0) {
+        // Root step: edge from each SM addition material to this step's output.
+        const addOps = (project.operations || [])
+          .filter(o => o.stepId === step.id && o.type === "addition" && o.materialId && addedMatIds.has(o.materialId));
+        addOps.forEach(op => {
+          rfEdges.push({
+            id: "pe:" + step.id + ":sm:" + op.materialId,
+            source: "p:" + op.materialId,
+            target: targetNodeId,
+            type: "pfdStepEdge",
+            markerEnd: { type: MarkerType.ArrowClosed, color: armColor },
+            data: { stepName: step.name, yieldPct: step.yield ?? null, armColor, dispatch, stepId: step.id, curvedEdges: !!curvedEdges },
+          });
+        });
+      } else {
+        // Convergent/downstream step: one edge per upstream step's output material.
+        (step.upstreamStepIds || []).forEach(upId => {
+          const upStep = steps.find(s => s.id === upId);
+          if (!upStep?.intermediateOutputMaterialId) return;
+          if (!addedMatIds.has(upStep.intermediateOutputMaterialId)) return;
+          rfEdges.push({
+            id: "pe:" + step.id + ":up:" + upId,
+            source: "p:" + upStep.intermediateOutputMaterialId,
+            target: targetNodeId,
+            type: "pfdStepEdge",
+            markerEnd: { type: MarkerType.ArrowClosed, color: armColor },
+            data: { stepName: step.name, yieldPct: step.yield ?? null, armColor, dispatch, stepId: step.id, curvedEdges: !!curvedEdges },
+          });
+        });
+      }
+    });
+
+    return { derivedNodes: rfNodes, derivedEdges: rfEdges };
+  }, [project, sortedSteps, nodePositions, compoundById, massFlowResult, batchResult, targetMass, dispatch, productStep, curvedEdges]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
+
+  useEffect(() => { setNodes(derivedNodes); }, [derivedNodes]);
+  useEffect(() => { setEdges(derivedEdges); }, [derivedEdges]);
+
+  // Wire export callback into the ref so PfdTab's button can trigger it.
+  // exportRef.current() calls exportPfdSvg with the live node/edge state.
+  useEffect(() => {
+    if (exportRef && exportRef.current !== undefined) {
+      exportRef.current = () => exportPfdSvg(nodes, edges, project.name || "PFD");
+    }
+  }, [exportRef, nodes, edges, project.name]);
+
+  // Persist node drag positions with "p:{matId}" key namespace (v53).
+  const onNodeDragStop = useCallback((event, node) => {
+    dispatch(p => ({ ...p, pfdNodePositions: { ...(p.pfdNodePositions || {}), [node.id]: node.position } }));
+  }, [dispatch]);
+
+  return (
+    <div ref={pngContainerRef} style={{ width: "100%", height: "100%" }}>
+      <RF
+        nodes={nodes} edges={edges}
+        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+        onNodeDragStop={onNodeDragStop}
+        nodeTypes={PFD_UNIFIED_NODE_TYPES}
+        edgeTypes={PFD_UNIFIED_EDGE_TYPES}
+        fitView
+        style={{ background: C.light }}
+      >
+        <Background color={C.mid} gap={20} />
+        <Controls />
+        <MiniMap nodeColor={C.blue} />
+      </RF>
+    </div>
+  );
+}
+
+// computePfdLayout -- pure function, no React dependencies.
+// Derives the 2D grid positions, arm colors, and step topology from project data.
+// Returns { stepMap, depthOf, rowOf, numRows, maxDepth, numCols, armColorOf }.
+// v56: improved row spacing for multi-arm syntheses. Root steps that carry many
+//   addition-op inputs need extra vertical clearance so input cards don't visually
+//   overlap the next arm's output card. Each root step reserves Math.max(1, inputCount*0.4+0.6)
+//   row units before the next arm begins.
+function computePfdLayout(project, sortedSteps) {
+  const stepMap = Object.fromEntries(project.steps.map(s => [s.id, s]));
+
+  // Topological depth: root steps get depth 0; downstream steps get max(upstream)+1.
+  const depthOf = {};
+  for (const step of sortedSteps) {
+    const upDepths = (step.upstreamStepIds || []).map(id => depthOf[id] ?? 0);
+    depthOf[step.id] = upDepths.length > 0 ? Math.max(...upDepths) + 1 : 0;
+  }
+
+  // Row assignment with multi-arm spacing (v56).
+  // Root steps: row is allocated by how many addition-op input nodes they need,
+  // because inputs are placed at row + oi*0.4 vertically and need clearance from
+  // the next arm's nodes (each card is CH=236px tall, VG=68 gap -> 304px/row).
+  // Reserving max(1, inputCount*0.4 + 0.6) prevents input cards from overlapping
+  // the next arm's output card.
+  const rowOf = {};
+  let nextRow = 0;
+  for (const step of sortedSteps) {
+    if ((step.upstreamStepIds || []).length === 0) {
+      rowOf[step.id] = nextRow;
+      const inputCount = (project.operations || [])
+        .filter(o => o.stepId === step.id && o.type === "addition" && o.materialId).length;
+      nextRow += Math.max(1, inputCount * 0.4 + 0.6);
+    } else {
+      const upRows = (step.upstreamStepIds || []).map(id => rowOf[id] ?? 0);
+      rowOf[step.id] = upRows.reduce((a, b) => a + b, 0) / upRows.length;
+    }
+  }
+
+  const numRows = nextRow;
+  const maxDepth = Math.max(0, ...Object.values(depthOf));
+  const numCols = maxDepth + 2; // col 0 = SM input nodes; col 1..N+1 = output nodes
+
+  // Arm colors: each root step gets a deterministic color; descendants inherit.
+  const ARM_COLORS = ["#6a9bcc", "#d97757", "#788c5d", "#9b7db8", "#6dada8", "#c4a43c"];
+  const rootSteps = sortedSteps.filter(s => (s.upstreamStepIds || []).length === 0);
+  const armColorOf = {};
+  rootSteps.forEach((s, i) => { armColorOf[s.id] = ARM_COLORS[i % ARM_COLORS.length]; });
+  for (const step of sortedSteps) {
+    if (armColorOf[step.id] == null) {
+      const firstUp = (step.upstreamStepIds || [])[0];
+      armColorOf[step.id] = armColorOf[firstUp] || ARM_COLORS[0];
+    }
+  }
+
+  // Keep rootSteps/ARM_COLORS in this return contract for PfdTab destructuring.
+  return { stepMap, depthOf, rowOf, numRows, maxDepth, numCols, armColorOf, rootSteps, ARM_COLORS };
+}
+
+// === PFD SVG EXPORT (v56) =====================================================
+// Pure-JS SVG export: no external dependencies (html2canvas not required).
+// Generates an SVG from the current React Flow node/edge state.
+// Each node renders as a bordered rectangle with name + key properties.
+// Each edge renders as a line with arrowhead + step name + yield label.
+// SMILES structures are omitted (canvas elements cannot be serialized to SVG).
+// =============================================================================
+
+function exportPfdSvg(nodes, edges, projectName) {
+  if (!nodes || nodes.length === 0) return;
+
+  const CW = 214, CH = 236;
+  const PADDING = 40;
+  const ARROW_LEN = 10;
+
+  // Compute bounding box of all nodes.
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    const x = n.position.x, y = n.position.y;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x + CW > maxX) maxX = x + CW;
+    if (y + CH > maxY) maxY = y + CH;
+  });
+
+  // Node lookup by id for edge endpoint calculation.
+  const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+  const svgW = maxX - minX + PADDING * 2;
+  const svgH = maxY - minY + PADDING * 2;
+  const ox = -minX + PADDING; // translation offset
+  const oy = -minY + PADDING;
+
+  const svgLines = [];
+  svgLines.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">`);
+  svgLines.push(`<rect width="${svgW}" height="${svgH}" fill="#faf9f5"/>`);
+
+  // Title
+  const title = (projectName || "PFD").replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
+  svgLines.push(`<text x="${svgW / 2}" y="22" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="#141413">${title} -- Process Flow Diagram</text>`);
+
+  // Edges (drawn first, underneath nodes).
+  edges.forEach(e => {
+    const src = nodeById[e.source], tgt = nodeById[e.target];
+    if (!src || !tgt) return;
+    // Source handle: right-center of source node.
+    const x1 = src.position.x + ox + CW;
+    const y1 = src.position.y + oy + CH / 2;
+    // Target handle: left-center of target node.
+    const x2 = tgt.position.x + ox;
+    const y2 = tgt.position.y + oy + CH / 2;
+
+    const color = (e.data && e.data.armColor) || "#6a9bcc";
+    const safeColor = color.replace(/[^#a-zA-Z0-9]/g, "");
+
+    // Draw line.
+    svgLines.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${safeColor}" stroke-width="2" opacity="0.85"/>`);
+
+    // Arrowhead at target end.
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const ax = x2 - ux * ARROW_LEN, ay = y2 - uy * ARROW_LEN;
+    const nx = -uy, ny = ux; // normal
+    svgLines.push(`<polygon points="${x2},${y2} ${ax + nx * 5},${ay + ny * 5} ${ax - nx * 5},${ay - ny * 5}" fill="${safeColor}"/>`);
+
+    // Edge label (step name + yield) at midpoint.
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const stepName = (e.data && e.data.stepName) ? String(e.data.stepName) : "";
+    const yieldPct = (e.data && e.data.yieldPct != null) ? e.data.yieldPct + "%" : "";
+    const rawLabel = stepName.length > 28 ? stepName.slice(0, 26) + ".." : stepName;
+    const label = rawLabel.replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
+    const yLabel = yieldPct.replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c]);
+
+    if (label) {
+      svgLines.push(`<rect x="${mx - label.length * 3.2}" y="${my - 22}" width="${label.length * 6.4 + 4}" height="14" rx="2" fill="rgba(250,249,245,0.92)"/>`);
+      svgLines.push(`<text x="${mx}" y="${my - 11}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="#222">${label}</text>`);
+    }
+    if (yLabel) {
+      svgLines.push(`<rect x="${mx - 28}" y="${my - 6}" width="56" height="14" rx="2" fill="rgba(250,249,245,0.85)"/>`);
+      svgLines.push(`<text x="${mx}" y="${my + 5}" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" font-weight="600" fill="#788c5d">Yield: ${yLabel}</text>`);
+    }
+  });
+
+  // Nodes (drawn on top of edges).
+  nodes.forEach(n => {
+    const { data } = n;
+    if (!data) return;
+    const x = n.position.x + ox, y = n.position.y + oy;
+    const color = (data.armColor || "#6a9bcc").replace(/[^#a-zA-Z0-9]/g, "");
+    const isProduct = data.isProducedByProductStep;
+    const strokeW = isProduct ? 2.5 : 1.5;
+
+    // Background + border.
+    svgLines.push(`<rect x="${x}" y="${y}" width="${CW}" height="${CH}" rx="8" fill="#fff" stroke="${color}" stroke-width="${strokeW}"/>`);
+
+    // SMILES area header (colored tint, no actual structure).
+    const SH = 84;
+    const isBlend = data.blendNames && data.blendNames.length > 0;
+    const tintColor = color + "12"; // color with ~7% opacity suffix isn't valid SVG hex; use rgba
+    svgLines.push(`<rect x="${x}" y="${y}" width="${CW}" height="${SH}" rx="6" fill="${color}" fill-opacity="0.07"/>`);
+
+    if (isBlend && data.blendNames) {
+      svgLines.push(`<text x="${x + 8}" y="${y + 18}" font-family="system-ui,sans-serif" font-size="9" font-weight="700" fill="${color}">Blend:</text>`);
+      data.blendNames.slice(0, 4).forEach((bn, bi) => {
+        const safe = String(bn).replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
+        svgLines.push(`<text x="${x + 8}" y="${y + 30 + bi * 12}" font-family="system-ui,sans-serif" font-size="9" fill="#333">${safe}</text>`);
+      });
+    } else {
+      svgLines.push(`<text x="${x + CW / 2}" y="${y + SH / 2 + 4}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="${color}" opacity="0.6">SMILES</text>`);
+    }
+
+    // Separator line.
+    svgLines.push(`<line x1="${x}" y1="${y + SH}" x2="${x + CW}" y2="${y + SH}" stroke="${color}" stroke-width="0.5" opacity="0.2"/>`);
+
+    // Material name.
+    const name = String(data.mat?.name || "(no material)").replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]).slice(0, 30);
+    svgLines.push(`<text x="${x + 9}" y="${y + SH + 16}" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#222">${name}</text>`);
+    svgLines.push(`<line x1="${x + 9}" y1="${y + SH + 21}" x2="${x + CW - 9}" y2="${y + SH + 21}" stroke="#e8e8e8"/>`);
+
+    // Properties grid (MW, Moles, Assay, Weight).
+    const rows = [
+      ["MW", data.mw != null ? data.mw + " g/mol" : "--"],
+      ["Moles", data.moles != null && data.mw != null
+        ? (data.moles < 0.1 ? (data.moles * 1000).toFixed(2) + " mmol" : data.moles.toFixed(3) + " mol") : "--"],
+      ["Assay", data.assay != null ? data.assay.toFixed(1) + "%" : "--"],
+      ["Weight", data.weightKg != null ? data.weightKg.toFixed(2) + " kg" : (data.targetMass != null ? data.targetMass.toFixed(2) + " kg" : "--")],
+    ];
+    rows.forEach(([label, value], ri) => {
+      const ry = y + SH + 32 + ri * 20;
+      const safeVal = String(value).replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
+      svgLines.push(`<text x="${x + 9}" y="${ry}" font-family="system-ui,sans-serif" font-size="11" fill="#666">${label}</text>`);
+      svgLines.push(`<text x="${x + CW - 9}" y="${ry}" text-anchor="end" font-family="ui-monospace,monospace" font-size="11" fill="#222">${safeVal}</text>`);
+      if (ri < 3) svgLines.push(`<line x1="${x + 9}" y1="${ry + 4}" x2="${x + CW - 9}" y2="${ry + 4}" stroke="#f0f0f0"/>`);
+    });
+  });
+
+  svgLines.push("</svg>");
+  const svgStr = svgLines.join("\n");
+
+  // Trigger download.
+  const blob = new Blob([svgStr], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (projectName || "PFD").replace(/\s+/g, "_") + "_PFD.svg";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// === PFD TAB =================================================================
+// Single-canvas PFD view (v53). Replaced the two-view toggle (Step Canvas / Detail Canvas).
+// v56: curved-edges toggle (straight/bezier) + SVG export button added to toolbar.
+// v57: PNG export via html2canvas added (pngContainerRef passed to PfdUnifiedGraph).
+// =============================================================================
+
+// exportPfdPng -- PNG export using html2canvas (CDN-loaded, optional).
+// containerEl: the DOM element wrapping the React Flow canvas.
+// projectName: used as the filename base.
+// Falls back to an alert if html2canvas is not available (CDN not loaded yet).
+function exportPfdPng(containerEl, projectName) {
+  if (typeof window.html2canvas !== "function") {
+    alert("PNG export requires the html2canvas library. Check your network connection and try again.");
+    return;
+  }
+  window.html2canvas(containerEl, { useCORS: true, logging: false, backgroundColor: "#faf9f5" })
+    .then(canvas => {
+      const url = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (projectName || "PFD").replace(/\s+/g, "_") + "_PFD.png";
+      a.click();
+    })
+    .catch(err => {
+      console.error("html2canvas error:", err);
+      alert("PNG export failed. Try SVG export instead.");
+    });
+}
+
+function PfdTab({ project, dispatch }) {
+  const { sortedSteps } = useContext(SimContext);
+  const [curvedEdges, setCurvedEdges] = React.useState(false);
+  // exportRef: callback ref for SVG export -- wired inside PfdUnifiedGraph.
+  const exportRef = React.useRef(null);
+  // pngContainerRef: DOM ref to the React Flow canvas wrapper for html2canvas PNG export.
+  const pngContainerRef = React.useRef(null);
+
+  if (!sortedSteps || sortedSteps.length === 0) return (
+    <div style={{ padding: "40px 24px", color: C.midDark, textAlign: "center", fontSize: "13px" }}>
+      No steps defined. Add steps and operations to see the Process Flow Diagram.
+    </div>
+  );
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 24px", borderBottom: `1px solid ${C.border}`, background: "#fff" }}>
+        <span style={{ fontSize: "17px", fontWeight: 700, color: C.dark }}>Process Flow Diagram</span>
+        <span style={{ fontSize: "12px", color: C.midDark, flex: 1 }}>
+          Drag nodes to rearrange &mdash; click yield or weight values to edit &mdash; only input, intermediate, and output materials are shown
+        </span>
+        {/* Curved edges toggle */}
+        <button
+          onClick={() => setCurvedEdges(v => !v)}
+          title={curvedEdges ? "Switch to straight edges" : "Switch to curved edges"}
+          style={{
+            padding: "4px 10px", fontSize: "12px", fontWeight: 600,
+            background: curvedEdges ? C.blue : "#fff",
+            color: curvedEdges ? "#fff" : C.dark,
+            border: `1px solid ${curvedEdges ? C.blue : C.border}`,
+            borderRadius: "5px", cursor: "pointer", whiteSpace: "nowrap",
+          }}>
+          {curvedEdges ? "Curved" : "Straight"} edges
+        </button>
+        {/* SVG export */}
+        <button
+          onClick={() => { if (exportRef.current) exportRef.current(); }}
+          title="Export PFD as SVG (vector, no SMILES structures)"
+          style={{
+            padding: "4px 10px", fontSize: "12px", fontWeight: 600,
+            background: "#fff", color: C.dark, border: `1px solid ${C.border}`,
+            borderRadius: "5px", cursor: "pointer", whiteSpace: "nowrap",
+          }}>
+          Export SVG
+        </button>
+        {/* PNG export (html2canvas) */}
+        <button
+          onClick={() => { if (pngContainerRef.current) exportPfdPng(pngContainerRef.current, project.name); }}
+          title="Export PFD as PNG image (requires network for html2canvas)"
+          style={{
+            padding: "4px 10px", fontSize: "12px", fontWeight: 600,
+            background: "#fff", color: C.dark, border: `1px solid ${C.border}`,
+            borderRadius: "5px", cursor: "pointer", whiteSpace: "nowrap",
+          }}>
+          Export PNG
+        </button>
+      </div>
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        <PfdUnifiedGraph project={project} dispatch={dispatch}
+          curvedEdges={curvedEdges} exportRef={exportRef} pngContainerRef={pngContainerRef} />
+      </div>
+    </div>
+  );
+}
+
+// ---- tabs_v59.js ----
+
+// =============================================================================
+// === tabs.js -- v59: Tab view components and root App
+// =============================================================================
+// Depends on: data.js, models.js, core.js, pfd.js (load all before this file)
+// Contains:
+//   - EquipmentTab, MaterialsTab, ConfigurationTab, MassBalanceTab
+//   - GanttTab, CostTab, BomTab, OverviewTab, OrgCostsTab
+//   - DonutChart, CostSankeySection, GreenMetricsSection, ProcessSummarySection
+//   - LabelRow helper
+//   - App (root component, export default)
+// =============================================================================
+
+
 // =============================================================================
 // === EQUIPMENT TAB ===========================================================
 // =============================================================================
@@ -5545,7 +6511,11 @@ function MaterialsTab({ project, dispatch }) {
 
     const localHit = lookupCompoundInEntries(lookupEntries, pubchemQuery);
     if (localHit) {
-      applyLookupResult(localHit, "local");
+      // Canonicalize SMILES from the local DB via PubChem before applying the result,
+      // because local DB files may store non-canonical forms that SmilesDrawer cannot parse.
+      canonicalizeSmiles(localHit.smiles || "").then(cs => {
+        applyLookupResult({ ...localHit, smiles: cs }, "local");
+      }).catch(() => applyLookupResult(localHit, "local"));
       return;
     }
 
@@ -5643,8 +6613,14 @@ function MaterialsTab({ project, dispatch }) {
               <div style={{ marginTop: "4px", fontSize: "10px", color: pubchemStatus === "found" ? C.green : pubchemStatus === "searching" ? C.blue : C.orange }}>
                 {pubchemStatus === "searching" && (lookupEntries.length > 0 ? "Searching local DB, then ChEMBL, then CIR..." : "Searching ChEMBL, then CIR...")}
                 {pubchemStatus === "found" && pubchemResult && `${pubchemResult.source === "local" ? "Local DB" : pubchemResult.source === "cir" ? "CIR" : "ChEMBL"} hit: ${pubchemResult.title} (MW: ${pubchemResult.molecularWeight ?? "--"}${pubchemResult.density != null ? ", density: " + fmtSig(pubchemResult.density, 5) + " kg/L" : ""})`}
-                {pubchemStatus === "not_found" && "Not found in local DB, ChEMBL, or CIR. Try a different name, CAS, or SMILES."}
-                {pubchemStatus === "error" && "Network error: compound lookup failed. Check your connection or try a local DB JSON file."}
+                {pubchemStatus === "not_found" && "No results in ChEMBL or CIR. Tips: use the IUPAC name or common name (not abbreviations), paste a CAS number, or enter details manually below."}
+                {pubchemStatus === "error" && "Lookup failed (network error or CORS block). If offline, use a local DB JSON or enter the compound manually."}
+              </div>
+            )}
+            {/* v58: CAS number pattern hint -- shown while user is typing a CAS number */}
+            {!pubchemStatus && pubchemQuery && /^\d{1,7}-\d{2}-\d{1}$/.test(pubchemQuery.trim()) && (
+              <div style={{ marginTop: "4px", fontSize: "10px", color: C.blue }}>
+                CAS number detected -- press Lookup or Enter to search.
               </div>
             )}
           </div>
@@ -5720,7 +6696,7 @@ function MaterialsTab({ project, dispatch }) {
                       <div><div style={{ fontSize: "10px", color: C.midDark, marginBottom: "3px" }}>Density (kg/L)</div><input type="number" step="any" min="0" value={c.density ?? ""} onChange={e => dispatch(p => updateCompound(p, c.id, { density: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="e.g. 1.19" style={{ ...inp(), width: "100%", boxSizing: "border-box" }} /></div>
                       <div><div style={{ fontSize: "10px", color: C.midDark, marginBottom: "3px" }}>Unit cost ($/kg)</div><input type="number" step="any" min="0" value={c.unitCost ?? ""} onChange={e => dispatch(p => updateCompound(p, c.id, { unitCost: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="e.g. 2.50" style={{ ...inp(), width: "100%", boxSizing: "border-box" }} /></div>
                       <div><div style={{ fontSize: "10px", color: C.midDark, marginBottom: "3px" }}>Molar equiv</div><input type="number" step="any" min="0" value={c.molarEquivalents ?? 1} onChange={e => dispatch(p => updateCompound(p, c.id, { molarEquivalents: parseFloat(e.target.value) || 1 }))} style={{ ...inp(), width: "100%", boxSizing: "border-box" }} /></div>
-                      <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: "10px", color: C.midDark, marginBottom: "3px" }}>SMILES</div><input value={c.smiles || ""} onChange={e => dispatch(p => updateCompound(p, c.id, { smiles: e.target.value }))} placeholder="e.g. CCO" style={{ ...inp(), width: "100%", boxSizing: "border-box", fontFamily: MONO }} /></div>
+                      <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: "10px", color: C.midDark, marginBottom: "3px" }}>SMILES</div><input value={c.smiles || ""} onChange={e => dispatch(p => updateCompound(p, c.id, { smiles: e.target.value }))} onBlur={e => { const raw = e.target.value.trim(); if (raw) canonicalizeSmiles(raw).then(cs => { if (cs !== raw) dispatch(p => updateCompound(p, c.id, { smiles: cs })); }); }} placeholder="e.g. CCO" style={{ ...inp(), width: "100%", boxSizing: "border-box", fontFamily: MONO }} /></div>
                     </div>
                     {c.smiles && (
                       <div style={{ display: "flex", justifyContent: "center", margin: "8px 0", background: "#fff", borderRadius: "6px", border: `1px solid ${C.lightBorder}`, padding: "6px" }}>
@@ -6943,7 +7919,7 @@ function ProcessSummarySection({ project, steps, fmtDur, fmtF, recThS, recTdS, g
 // =============================================================================
 
 function OverviewTab({ project }) {
-  const { greenMetrics, durationMap, costResult } = useContext(SimContext);
+  const { greenMetrics, durationMap, costResult, massFlowResult, batchResult } = useContext(SimContext);
 
   const hasGreen = !!greenMetrics;
   const gm = greenMetrics || {};
@@ -6962,6 +7938,10 @@ function OverviewTab({ project }) {
   const labelS = { fontSize: "11px", color: C.midDark, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.06em" };
   const noteS = { fontSize: "12px", color: C.midDark, marginTop: "6px", lineHeight: 1.5 };
 
+  // fmtDur: operation-level duration formatter for the process-summary table.
+  // Intentionally different from module-scope fmtDurationSig (hours -> "3.1 h" / "1.2 d"):
+  // this variant preserves the original unit (h/min) and appends a "(calc)" or
+  // "(override)" indicator so the reader knows the source of the value.
   const fmtDur = op => {
     const dr = durationMap[op.id];
     if (op.duration?.isOverridden && op.duration.override != null)
@@ -6983,10 +7963,28 @@ function OverviewTab({ project }) {
   });
   const steps = [...project.steps].sort((a, b) => a.sequence - b.sequence);
 
+  // v54: Comprehensive project export -- aggregates all tab metrics into one CSV.
+  const handleExportProjectCSV = () => {
+    const csvCells = (row) => row.map(v => '"' + String(v === null || v === undefined ? "" : v).replace(/"/g, '""') + '"').join(",");
+    // Data assembly is in models.js (buildProjectCsvSections) so it can be tested
+    // independently. This handler only handles the DOM download part.
+    const sections = buildProjectCsvSections(project, costResult, greenMetrics, massFlowResult, batchResult);
+    const csv = sections.map(row => row.length === 0 ? "" : csvCells(row)).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = project.name.replace(/\s+/g, "_") + "_full_export.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "20px 24px" }}>
       <div style={{ maxWidth: "920px", margin: "0 auto" }}>
-        <h2 style={{ fontSize: "17px", fontWeight: 700, marginBottom: "18px", color: C.dark }}>Overview</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" }}>
+          <h2 style={{ fontSize: "17px", fontWeight: 700, color: C.dark }}>Overview</h2>
+          <span style={{ flex: 1 }} />
+          <Btn variant="ghost" size="sm" onClick={handleExportProjectCSV} title="Export all metrics to a single CSV">Export All (CSV)</Btn>
+        </div>
         <ProcessSummarySection project={project} steps={steps} fmtDur={fmtDur} fmtF={fmtF}
           recThS={recThS} recTdS={recTdS} getOpsForStep={getOpsForStep} costResult={costResult} />
         <GreenMetricsSection gm={gm} hasGreen={hasGreen} pmiColor={pmiColor} pmiLabel={pmiLabel} pmiNote={pmiNote}
@@ -7024,6 +8022,7 @@ function BomTab({ project }) {
 
   const handleExportCSV = () => {
     // v47: include material type, per-batch kg, and per-campaign kg (when batch sizing active)
+    // v57: append consumable cost breakdown as a separate section after the materials table
     const materialById = Object.fromEntries(project.materials.map(m => [m.id, m]));
     const headers = showScaled
       ? ["Material", "Type", "Per Batch (kg)", "Per Campaign (kg)", "Unit Cost ($/kg)", "Per Batch Cost ($)", "Per Campaign Cost ($)"]
@@ -7051,9 +8050,53 @@ function BomTab({ project }) {
       ];
     });
     const rows = [headers, ...dataRows];
+
+    // Consumable section (v57): appended after materials if any consumables exist.
+    if (costResult.consumableUsage && costResult.consumableUsage.length > 0) {
+      rows.push([]); // blank separator row
+      const conHeaders = showScaled
+        ? ["Consumable", "Step", "Units/Batch", "Units/Campaign", "Unit Cost ($)", "Per Batch Cost ($)", "Per Campaign Cost ($)"]
+        : ["Consumable", "Step", "Units/Batch", "Unit Cost ($)", "Per Batch Cost ($)"];
+      rows.push(conHeaders);
+      const stepById = Object.fromEntries(project.steps.map(s => [s.id, s]));
+      costResult.consumableUsage.forEach(u => {
+        const stepName = stepById[u.stepId]?.name ?? "";
+        const campaignUnits = showScaled ? u.unitsNeeded * totalBatches : null;
+        const campaignCost = campaignUnits != null && u.consumable.unitCost != null ? campaignUnits * u.consumable.unitCost : null;
+        if (showScaled) {
+          rows.push([u.consumable.name, stepName, u.unitsNeeded, campaignUnits ?? "", u.consumable.unitCost ?? "", u.totalCost ?? "", campaignCost ?? ""]);
+        } else {
+          rows.push([u.consumable.name, stepName, u.unitsNeeded, u.consumable.unitCost ?? "", u.totalCost ?? ""]);
+        }
+      });
+    }
+
     const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" }); const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `${project.name.replace(/\s+/g, "_")}_bom.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+
+  // v58: export consumables-only CSV for procurement/packaging analysis
+  const handleExportConsumablesCSV = () => {
+    if (!costResult.consumableUsage || costResult.consumableUsage.length === 0) return;
+    const stepById = Object.fromEntries(project.steps.map(s => [s.id, s]));
+    const headers = showScaled
+      ? ["Consumable", "Step", "Units/Batch", "Units/Campaign", "Unit Cost ($)", "Per Batch Cost ($)", "Per Campaign Cost ($)"]
+      : ["Consumable", "Step", "Units/Batch", "Unit Cost ($)", "Per Batch Cost ($)"];
+    const rows = [headers];
+    costResult.consumableUsage.forEach(u => {
+      const stepName = stepById[u.stepId]?.name ?? "";
+      const campaignUnits = showScaled ? u.unitsNeeded * totalBatches : null;
+      const campaignCost = campaignUnits != null && u.consumable.unitCost != null ? campaignUnits * u.consumable.unitCost : null;
+      if (showScaled) {
+        rows.push([u.consumable.name, stepName, u.unitsNeeded, campaignUnits ?? "", u.consumable.unitCost ?? "", u.totalCost ?? "", campaignCost ?? ""]);
+      } else {
+        rows.push([u.consumable.name, stepName, u.unitsNeeded, u.consumable.unitCost ?? "", u.totalCost ?? ""]);
+      }
+    });
+    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" }); const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${project.name.replace(/\s+/g, "_")}_consumables.csv`; a.click(); URL.revokeObjectURL(url);
   };
 
   return (
@@ -7066,8 +8109,11 @@ function BomTab({ project }) {
             Batches: {totalBatches}
           </span>
         )}
-        <span style={{ marginLeft: "auto" }}>
-          <Btn variant="primary" size="sm" onClick={handleExportCSV} title="Export BOM as CSV">Export CSV</Btn>
+        <span style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
+          <Btn variant="primary" size="sm" onClick={handleExportCSV} title="Export full BOM as CSV (materials + consumables)">Export CSV</Btn>
+          {costResult.consumableUsage && costResult.consumableUsage.length > 0 && (
+            <Btn variant="light" size="sm" onClick={handleExportConsumablesCSV} title="Export consumables-only CSV">Consumables CSV</Btn>
+          )}
         </span>
       </div>
 
@@ -7166,560 +8212,6 @@ function BomTab({ project }) {
   );
 }
 
-
-// =============================================================================
-// === PFD LAYOUT HELPERS ======================================================
-// =============================================================================
-
-// === UNIFIED PFD CANVAS (v53) ================================================
-// Single React Flow canvas: material detail cards as nodes, steps as edges.
-// PfdMatNodeRF: full material card with connection handles (input left, output right).
-// PfdStepEdgeRF: custom edge with editable step name + yield label.
-// Replaces the prior two-canvas system (PfdNodeGraph + PfdDetailGraph).
-// Node visibility: only "input", "intermediate", "output" material types shown.
-// Position keys: "p:{matId}" (old "s:", "m:", "dm:" keys are silently ignored).
-// =============================================================================
-
-// PfdMatNodeRF -- full material detail card with React Flow handles (v53).
-// Content mirrors PfdDetailNodeRF from the prior version; adds Handle on left (target) and right (source).
-// Editable fields: MW (click), Assay (click), Weight (product only, click).
-// All edits dispatch to project state via data.dispatch.
-function PfdMatNodeRF({ data }) {
-  if (typeof ReactFlow === "undefined") {
-    return <div style={{ padding: "8px 12px", border: "2px solid #888", borderRadius: "8px", background: "#fff", fontSize: "12px" }}>
-      {data.mat ? data.mat.name : "Material"}
-    </div>;
-  }
-  const { Handle, Position } = ReactFlow;
-
-  const {
-    mat, mw, assay, moles, weightKg, isProduct, isProducedByProductStep,
-    armColor, targetMass, dispatch, blendNames, smiles, compoundById,
-  } = data;
-
-  const [mwEdit, setMwEdit] = React.useState(null);
-  const [assayEdit, setAssayEdit] = React.useState(null);
-  const [wgtEdit, setWgtEdit] = React.useState(null);
-
-  const CW = 214, CH = 236, SH = 84;
-  const firstCmpId = (mat?.composition || [])[0]?.compoundId;
-  const smilesRaw = String(smiles || "").trim();
-  const cardStroke = isProducedByProductStep ? 2.5 : 1.5;
-  const isBlend = blendNames && blendNames.length > 0;
-  const name = mat?.name ?? "(no material)";
-
-  function commitMw(raw) {
-    const n = parseFloat(raw);
-    if (!isNaN(n) && n > 0 && firstCmpId) {
-      dispatch(p => updateCompound(p, firstCmpId, { molecularWeight: parseFloat(n.toFixed(4)) }));
-    }
-    setMwEdit(null);
-  }
-  function commitAssay(raw) {
-    const n = parseFloat(raw);
-    if (!isNaN(n) && n >= 0 && n <= 100 && mat) {
-      const entry = (mat.composition || [])[0];
-      if (entry) {
-        const rebalanced = rebalanceCompositionFractions(mat.composition, entry.compoundId, parseFloat((n / 100).toFixed(6)));
-        dispatch(p => updateMaterial(p, mat.id, { composition: rebalanced }));
-      }
-    }
-    setAssayEdit(null);
-  }
-  function commitWeight(raw) {
-    const n = parseFloat(raw);
-    if (!isNaN(n) && n > 0) {
-      dispatch(p => setTargetOutputMass(p, n));
-    }
-    setWgtEdit(null);
-  }
-
-  const fPct = v => v == null ? "--" : v.toFixed(1) + "%";
-  const fMolDisplay = (mol, mwVal) => {
-    if (mol == null || mwVal == null) return "--";
-    return mol < 0.1 ? fmtSig(mol * 1000, 3) + " mmol" : fmtSig(mol, 3) + " mol";
-  };
-
-  return (
-    <div style={{
-      width: CW, height: CH,
-      border: `${cardStroke}px solid ${armColor}`,
-      borderRadius: 8, background: "#fff",
-      boxShadow: isProducedByProductStep ? ("0 2px 14px " + armColor + "44") : "0 1px 6px rgba(0,0,0,0.10)",
-      display: "flex", flexDirection: "column", overflow: "visible",
-      fontFamily: "system-ui,-apple-system,'Segoe UI',sans-serif",
-    }}>
-      {/* Left handle (target) -- materials receive flow from upstream steps */}
-      <Handle type="target" position={Position.Left}
-        style={{ background: armColor, width: 10, height: 10, border: "2px solid #fff", left: -6 }} />
-
-      {/* SMILES or blend names top panel */}
-      <div style={{
-        height: SH, background: armColor + "12",
-        borderBottom: "1px solid " + armColor + "28",
-        borderRadius: "6px 6px 0 0",
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        overflow: "hidden", padding: isBlend ? "6px 8px" : 0,
-      }}>
-        {isBlend ? (
-          <div style={{ width: "100%" }}>
-            <div style={{ fontSize: "9px", color: armColor, fontWeight: 700, marginBottom: "4px" }}>Blend:</div>
-            {blendNames.map((n, i) => (
-              <div key={i} style={{ fontSize: "9px", color: "#333",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n}</div>
-            ))}
-          </div>
-        ) : (
-          <SmilesRenderer smiles={smilesRaw || null} width={CW - 20} height={SH - 8} />
-        )}
-      </div>
-
-      {/* Property grid */}
-      <div style={{ flex: 1, padding: "6px 9px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{
-          fontSize: "11px", fontWeight: 700, color: "#222",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          paddingBottom: 4, borderBottom: "1px solid #e8e8e8", marginBottom: 3,
-        }} title={name}>{name}</div>
-
-        {/* MW */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-          fontSize: "11px", padding: "2px 0", borderBottom: "1px solid #f0f0f0" }}>
-          <span style={{ color: "#666" }}>MW</span>
-          {mwEdit !== null ? (
-            <input type="number" step="any" min="0" value={mwEdit}
-              onChange={e => setMwEdit(e.target.value)}
-              onBlur={e => commitMw(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") commitMw(mwEdit); if (e.key === "Escape") setMwEdit(null); }}
-              style={{ width: 72, fontSize: "11px", fontFamily: MONO, border: "none",
-                borderBottom: "1px solid " + C.orange, outline: "none", background: "transparent",
-                color: "#222", textAlign: "right" }} autoFocus />
-          ) : (
-            <span onClick={firstCmpId ? () => setMwEdit(mw != null ? String(mw) : "") : undefined}
-              title={firstCmpId ? "Click to edit MW" : ""}
-              style={{ fontFamily: MONO, fontSize: "11px",
-                color: firstCmpId ? "#222" : "#999",
-                cursor: firstCmpId ? "text" : "default",
-                borderBottom: firstCmpId ? "1px dashed #888" : "none" }}>
-              {mw != null ? mw + " g/mol" : "--"}
-            </span>
-          )}
-        </div>
-
-        {/* Moles */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-          fontSize: "11px", padding: "2px 0", borderBottom: "1px solid #f0f0f0" }}>
-          <span style={{ color: "#666" }}>Moles</span>
-          <span style={{ fontFamily: MONO, color: "#222" }}>{fMolDisplay(moles, mw)}</span>
-        </div>
-
-        {/* Assay */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-          fontSize: "11px", padding: "2px 0", borderBottom: "1px solid #f0f0f0" }}>
-          <span style={{ color: "#666" }}>Assay</span>
-          {assayEdit !== null ? (
-            <input type="number" step="any" min="0" max="100" value={assayEdit}
-              onChange={e => setAssayEdit(e.target.value)}
-              onBlur={e => commitAssay(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") commitAssay(assayEdit); if (e.key === "Escape") setAssayEdit(null); }}
-              style={{ width: 72, fontSize: "11px", fontFamily: MONO, border: "none",
-                borderBottom: "1px solid " + C.orange, outline: "none", background: "transparent",
-                color: "#222", textAlign: "right" }} autoFocus />
-          ) : (
-            <span onClick={(mat?.composition?.length > 0) ? () => setAssayEdit(assay != null ? String(assay.toFixed(2)) : "") : undefined}
-              title={(mat?.composition?.length > 0) ? "Click to edit assay %" : ""}
-              style={{ fontFamily: MONO, fontSize: "11px",
-                color: (mat?.composition?.length > 0) ? "#222" : "#999",
-                cursor: (mat?.composition?.length > 0) ? "text" : "default",
-                borderBottom: (mat?.composition?.length > 0) ? "1px dashed #888" : "none" }}>
-              {fPct(assay)}
-            </span>
-          )}
-        </div>
-
-        {/* Weight -- editable for product node */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-          fontSize: "11px", padding: "2px 0" }}>
-          <span style={{ color: "#666" }}>Weight</span>
-          {isProducedByProductStep ? (
-            wgtEdit !== null ? (
-              <input value={wgtEdit}
-                onChange={e => setWgtEdit(e.target.value)}
-                onBlur={e => commitWeight(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") commitWeight(wgtEdit); if (e.key === "Escape") setWgtEdit(null); }}
-                style={{ width: 80, fontSize: "11px", fontFamily: MONO, border: "none",
-                  borderBottom: "1px solid " + C.blue, outline: "none", background: "transparent",
-                  color: "#222", textAlign: "right" }} autoFocus />
-            ) : (
-              <span onClick={() => setWgtEdit(String(targetMass ?? weightKg ?? ""))}
-                title="Click to set target batch weight"
-                style={{ fontFamily: MONO, fontSize: "11px", color: C.blue, fontWeight: 600,
-                  borderBottom: "1px dashed " + C.blue, cursor: "text" }}>
-                {targetMass != null ? targetMass.toFixed(2) + " kg" : fmtKgSig(weightKg)}
-              </span>
-            )
-          ) : (
-            <span style={{ fontFamily: MONO, fontSize: "11px", color: "#999" }}>{fmtKgSig(weightKg)}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Right handle (source) -- materials feed into downstream steps */}
-      <Handle type="source" position={Position.Right}
-        style={{ background: armColor, width: 10, height: 10, border: "2px solid #fff", right: -6 }} />
-    </div>
-  );
-}
-
-// PfdStepEdgeRF -- custom edge rendering a step name + editable yield between material nodes (v53).
-// Reused from PfdDetailGraph; no functional changes required.
-function PfdStepEdgeRF({ id, sourceX, sourceY, targetX, targetY, data, markerEnd }) {
-  if (typeof ReactFlow === "undefined") return null;
-  const { getStraightPath, EdgeLabelRenderer, BaseEdge } = ReactFlow;
-  const { stepName, yieldPct, armColor, dispatch, stepId } = data;
-
-  const [yieldEdit, setYieldEdit] = React.useState(null);
-
-  const [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY });
-
-  function commitYield(raw) {
-    const n = parseFloat(raw);
-    if (!isNaN(n) && n >= 0 && n <= 100) {
-      dispatch(p => updateStep(p, stepId, { yield: parseFloat(n.toFixed(2)) }));
-    }
-    setYieldEdit(null);
-  }
-
-  const displayName = stepName && stepName.length > 26 ? stepName.slice(0, 24) + ".." : (stepName || "");
-
-  return (
-    <>
-      <BaseEdge id={id} path={edgePath}
-        style={{ stroke: armColor, strokeWidth: 2, opacity: 0.85 }}
-        markerEnd={markerEnd} />
-      <EdgeLabelRenderer>
-        <div style={{
-          position: "absolute",
-          transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-          pointerEvents: "all",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-          zIndex: 1,
-        }}>
-          <div style={{
-            fontSize: "10px", fontWeight: 600, color: "#222",
-            background: "rgba(250,249,245,0.92)",
-            padding: "1px 5px", borderRadius: 3, whiteSpace: "nowrap",
-          }}>{displayName}</div>
-          {yieldEdit !== null ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 3,
-              background: "#fff", border: "1px solid #ddd", borderRadius: 4,
-              padding: "2px 6px", boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}>
-              <span style={{ fontSize: "10px", color: "#666", fontFamily: MONO }}>Yield:</span>
-              <input type="number" min={0} max={100} step={0.1} value={yieldEdit}
-                onChange={e => setYieldEdit(e.target.value)}
-                onBlur={e => commitYield(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") commitYield(yieldEdit); if (e.key === "Escape") setYieldEdit(null); }}
-                style={{ width: 46, fontSize: "11px", fontFamily: MONO, border: "none",
-                  outline: "none", background: "transparent", color: "#222", textAlign: "right" }}
-                autoFocus />
-              <span style={{ fontSize: "10px", color: "#666", fontFamily: MONO }}>%</span>
-            </div>
-          ) : (
-            <div onClick={() => setYieldEdit(yieldPct != null ? String(yieldPct) : "")}
-              title="Click to edit yield"
-              style={{ fontSize: "11px", color: C.green, fontFamily: MONO, fontWeight: 600,
-                cursor: "text", background: "rgba(250,249,245,0.85)",
-                padding: "1px 5px", borderRadius: 3, borderBottom: "1px dashed " + C.green }}>
-              Yield: {yieldPct != null ? yieldPct + "%" : "--"}
-            </div>
-          )}
-        </div>
-      </EdgeLabelRenderer>
-    </>
-  );
-}
-
-// Module-scope type registries -- prevents React Flow from re-creating on each render.
-const PFD_UNIFIED_NODE_TYPES = { pfdMatNode: PfdMatNodeRF };
-const PFD_UNIFIED_EDGE_TYPES = { pfdStepEdge: PfdStepEdgeRF };
-
-// PfdUnifiedGraph -- single React Flow canvas for the PFD tab (v53).
-// Materials (input/intermediate/output types only) are nodes; steps are edges.
-// Node positions keyed "p:{matId}"; old "s:", "m:", "dm:" keys are silently ignored.
-function PfdUnifiedGraph({ project, dispatch }) {
-  if (typeof ReactFlow === "undefined" || !ReactFlow.ReactFlow) {
-    return (
-      <div style={{ padding: "32px", textAlign: "center", color: C.midDark }}>
-        PFD canvas unavailable -- React Flow library did not load.
-        Check your network connection and reload the page.
-      </div>
-    );
-  }
-
-  const { ReactFlow: RF, Background, Controls, MiniMap,
-          useNodesState, useEdgesState, MarkerType } = ReactFlow;
-
-  const { sortedSteps, massFlowResult, batchResult } = useContext(SimContext);
-  const nodePositions = project.pfdNodePositions || {};
-
-  const compoundById = useMemo(() =>
-    Object.fromEntries((project.compounds || []).map(c => [c.id, c])),
-    [project.compounds]
-  );
-
-  const productStep = Array.isArray(sortedSteps) && sortedSteps.length > 0
-    ? sortedSteps[sortedSteps.length - 1] : null;
-  const targetMass = project.batchSizingConfig?.targetMass ?? null;
-
-  // Strict type filter: only input/intermediate/output materials are shown.
-  // Solvents and waste are bookkeeping entries, not primary flow nodes.
-  const VISIBLE_TYPES = new Set(["input", "intermediate", "output"]);
-
-  const { derivedNodes, derivedEdges } = useMemo(() => {
-    const steps = Array.isArray(sortedSteps) ? sortedSteps : [];
-    if (steps.length === 0) return { derivedNodes: [], derivedEdges: [] };
-
-    let layout = null;
-    try { layout = computePfdLayout(project, steps); } catch (_) {}
-
-    const { depthOf = {}, rowOf = {}, armColorOf = {}, ARM_COLORS = [] } = layout || {};
-    const CW = 214, CH = 236, HG = 220, VG = 68, PAD = 36;
-    const cX = col => PAD + col * (CW + HG);
-    const cY = row => PAD + row * (CH + VG);
-
-    const matById = Object.fromEntries((project.materials || []).map(m => [m.id, m]));
-
-    function matMW(mat) {
-      if (!mat) return null;
-      for (const e of (mat.composition || [])) {
-        const c = compoundById[e.compoundId];
-        if (c?.molecularWeight) return c.molecularWeight;
-      }
-      return null;
-    }
-    function matAssay(mat) {
-      if (!mat) return null;
-      const e = (mat.composition || [])[0];
-      return e ? e.fraction * 100 : null;
-    }
-    function stepOutputMass(stepId) {
-      const out = massFlowResult?.stepOutputMassByStepId?.[stepId];
-      return Number.isFinite(out) ? out : null;
-    }
-
-    const rfNodes = [];
-    const addedMatIds = new Set();
-
-    function addMatNode(matId, col, row, armColor, isProduct, isProducedByProductStep) {
-      if (addedMatIds.has(matId)) return;
-      const mat = matById[matId];
-      // Strict type filter: only render input/intermediate/output materials.
-      if (!mat || !VISIBLE_TYPES.has(mat.type)) return;
-      addedMatIds.add(matId);
-
-      const entries = (mat.composition) || [];
-      const mw = matMW(mat);
-      const assay = matAssay(mat);
-      const assayFactor = assay != null ? assay / 100 : 1;
-      const weightKg = isProducedByProductStep
-        ? stepOutputMass(productStep?.id)
-        : (entries.length > 0 ? stepOutputMass(steps.find(s => s.intermediateOutputMaterialId === matId)?.id) : null);
-      const moles = (weightKg != null && mw != null) ? (weightKg * assayFactor * 1000 / mw) : null;
-      const blendNames = entries.length > 1
-        ? entries.map(e => compoundById[e.compoundId]?.name || e.compoundId)
-        : null;
-      const firstCmpId = entries.length > 0 ? entries[0].compoundId : null;
-      const smiles = firstCmpId ? (compoundById[firstCmpId]?.smiles || "") : "";
-
-      const posKey = "p:" + matId;
-      const defaultPos = { x: cX(col), y: cY(row) };
-      const pos = nodePositions[posKey] ?? defaultPos;
-
-      rfNodes.push({
-        id: posKey,
-        type: "pfdMatNode",
-        position: pos,
-        draggable: true,
-        data: {
-          mat, compoundById, mw, assay, moles, weightKg,
-          isProduct, isProducedByProductStep, armColor,
-          targetMass: isProducedByProductStep ? targetMass : null,
-          dispatch, blendNames, smiles,
-        },
-      });
-    }
-
-    // Step output nodes: col = depthOf[step] + 1
-    steps.forEach(step => {
-      const col = (depthOf[step.id] ?? 0) + 1;
-      const row = rowOf[step.id] ?? 0;
-      const armColor = armColorOf[step.id] || ARM_COLORS[0] || C.blue;
-      if (step.intermediateOutputMaterialId) {
-        const isProducedByProductStep = !!(productStep && step.id === productStep.id);
-        const mat = matById[step.intermediateOutputMaterialId];
-        const isProduct = mat?.type === "output" || isProducedByProductStep;
-        addMatNode(step.intermediateOutputMaterialId, col, row, armColor, isProduct, isProducedByProductStep);
-      }
-    });
-
-    // Root step input nodes: col = 0 (to the left of root steps).
-    // Use all addition op materials that pass the type filter.
-    const rootSteps = steps.filter(s => (s.upstreamStepIds || []).length === 0);
-    rootSteps.forEach(step => {
-      const row = rowOf[step.id] ?? 0;
-      const armColor = armColorOf[step.id] || ARM_COLORS[0] || C.blue;
-      const addOps = (project.operations || []).filter(o => o.stepId === step.id && o.type === "addition" && o.materialId);
-      addOps.forEach((op, oi) => {
-        addMatNode(op.materialId, 0, row + oi * 0.4, armColor, false, false);
-      });
-    });
-
-    // Edges: one per step->upstream connection (step as labeled arrow between material nodes).
-    const rfEdges = [];
-    steps.forEach(step => {
-      const armColor = armColorOf[step.id] || ARM_COLORS[0] || C.blue;
-      const toMatId = step.intermediateOutputMaterialId;
-      if (!toMatId || !addedMatIds.has(toMatId)) return;
-      const targetNodeId = "p:" + toMatId;
-
-      if ((step.upstreamStepIds || []).length === 0) {
-        // Root step: edge from each SM addition material to this step's output.
-        const addOps = (project.operations || [])
-          .filter(o => o.stepId === step.id && o.type === "addition" && o.materialId && addedMatIds.has(o.materialId));
-        addOps.forEach(op => {
-          rfEdges.push({
-            id: "pe:" + step.id + ":sm:" + op.materialId,
-            source: "p:" + op.materialId,
-            target: targetNodeId,
-            type: "pfdStepEdge",
-            markerEnd: { type: MarkerType.ArrowClosed, color: armColor },
-            data: { stepName: step.name, yieldPct: step.yield ?? null, armColor, dispatch, stepId: step.id },
-          });
-        });
-      } else {
-        // Convergent/downstream step: one edge per upstream step's output material.
-        (step.upstreamStepIds || []).forEach(upId => {
-          const upStep = steps.find(s => s.id === upId);
-          if (!upStep?.intermediateOutputMaterialId) return;
-          if (!addedMatIds.has(upStep.intermediateOutputMaterialId)) return;
-          rfEdges.push({
-            id: "pe:" + step.id + ":up:" + upId,
-            source: "p:" + upStep.intermediateOutputMaterialId,
-            target: targetNodeId,
-            type: "pfdStepEdge",
-            markerEnd: { type: MarkerType.ArrowClosed, color: armColor },
-            data: { stepName: step.name, yieldPct: step.yield ?? null, armColor, dispatch, stepId: step.id },
-          });
-        });
-      }
-    });
-
-    return { derivedNodes: rfNodes, derivedEdges: rfEdges };
-  }, [project, sortedSteps, nodePositions, compoundById, massFlowResult, batchResult, targetMass, dispatch, productStep]);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
-
-  useEffect(() => { setNodes(derivedNodes); }, [derivedNodes]);
-  useEffect(() => { setEdges(derivedEdges); }, [derivedEdges]);
-
-  // Persist node drag positions with "p:{matId}" key namespace (v53).
-  const onNodeDragStop = useCallback((event, node) => {
-    dispatch(p => ({ ...p, pfdNodePositions: { ...(p.pfdNodePositions || {}), [node.id]: node.position } }));
-  }, [dispatch]);
-
-  return (
-    <div style={{ width: "100%", height: "100%" }}>
-      <RF
-        nodes={nodes} edges={edges}
-        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-        onNodeDragStop={onNodeDragStop}
-        nodeTypes={PFD_UNIFIED_NODE_TYPES}
-        edgeTypes={PFD_UNIFIED_EDGE_TYPES}
-        fitView
-        style={{ background: C.light }}
-      >
-        <Background color={C.mid} gap={20} />
-        <Controls />
-        <MiniMap nodeColor={C.blue} />
-      </RF>
-    </div>
-  );
-}
-
-// computePfdLayout -- pure function, no React dependencies.
-// Derives the 2D grid positions, arm colors, and step topology from project data.
-// Returns { stepMap, depthOf, rowOf, numRows, maxDepth, numCols, armColorOf }.
-function computePfdLayout(project, sortedSteps) {
-  const stepMap = Object.fromEntries(project.steps.map(s => [s.id, s]));
-
-  // Topological depth: root steps get depth 0; downstream steps get max(upstream)+1.
-  const depthOf = {};
-  for (const step of sortedSteps) {
-    const upDepths = (step.upstreamStepIds || []).map(id => depthOf[id] ?? 0);
-    depthOf[step.id] = upDepths.length > 0 ? Math.max(...upDepths) + 1 : 0;
-  }
-
-  // Row assignment: root steps get sequential rows; convergent steps get mean row.
-  // Fractional rows are intentional so merges stay visually centered between parents.
-  const rowOf = {};
-  let nextRow = 0;
-  for (const step of sortedSteps) {
-    if ((step.upstreamStepIds || []).length === 0) {
-      rowOf[step.id] = nextRow++;
-    } else {
-      const upRows = (step.upstreamStepIds || []).map(id => rowOf[id] ?? 0);
-      rowOf[step.id] = upRows.reduce((a, b) => a + b, 0) / upRows.length;
-    }
-  }
-
-  const numRows = nextRow;
-  const maxDepth = Math.max(0, ...Object.values(depthOf));
-  const numCols = maxDepth + 2; // col 0 = SM input nodes; col 1..N+1 = output nodes
-
-  // Arm colors: each root step gets a deterministic color; descendants inherit.
-  const ARM_COLORS = ["#6a9bcc", "#d97757", "#788c5d", "#9b7db8", "#6dada8", "#c4a43c"];
-  const rootSteps = sortedSteps.filter(s => (s.upstreamStepIds || []).length === 0);
-  const armColorOf = {};
-  rootSteps.forEach((s, i) => { armColorOf[s.id] = ARM_COLORS[i % ARM_COLORS.length]; });
-  for (const step of sortedSteps) {
-    if (armColorOf[step.id] == null) {
-      const firstUp = (step.upstreamStepIds || [])[0];
-      armColorOf[step.id] = armColorOf[firstUp] || ARM_COLORS[0];
-    }
-  }
-
-  // Keep rootSteps/ARM_COLORS in this return contract for PfdTab destructuring.
-  return { stepMap, depthOf, rowOf, numRows, maxDepth, numCols, armColorOf, rootSteps, ARM_COLORS };
-}
-
-// === PFD TAB =================================================================
-// Single-canvas PFD view (v53). Replaced the two-view toggle (Step Canvas / Detail Canvas).
-// =============================================================================
-
-function PfdTab({ project, dispatch }) {
-  const { sortedSteps } = useContext(SimContext);
-
-  if (!sortedSteps || sortedSteps.length === 0) return (
-    <div style={{ padding: "40px 24px", color: C.midDark, textAlign: "center", fontSize: "13px" }}>
-      No steps defined. Add steps and operations to see the Process Flow Diagram.
-    </div>
-  );
-
-  return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 24px", borderBottom: `1px solid ${C.border}`, background: "#fff" }}>
-        <span style={{ fontSize: "17px", fontWeight: 700, color: C.dark }}>Process Flow Diagram</span>
-        <span style={{ fontSize: "12px", color: C.midDark, flex: 1 }}>
-          Drag nodes to rearrange &mdash; click yield or weight values to edit &mdash; only input, intermediate, and output materials are shown
-        </span>
-      </div>
-      <div style={{ flex: 1, overflow: "hidden" }}>
-        <PfdUnifiedGraph project={project} dispatch={dispatch} />
-      </div>
-    </div>
-  );
-}
 
 // === ROOT APP ================================================================
 // =============================================================================
