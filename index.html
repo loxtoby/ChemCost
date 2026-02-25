@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ChemCost v59</title>
+  <title>ChemCost v61</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <!-- reactflow CSS (unpkg; cdnjs does not carry this package -- do not migrate) -->
   <link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css" />
@@ -45,10 +45,10 @@
     const { useState, useCallback, useEffect, useRef, createContext, useContext, useMemo } = React;
 
 
-// ---- data_v59.js ----
+// ---- data_v61.js ----
 
 // =============================================================================
-// === data.js -- v59: Static configuration and Icon component =================
+// === data.js -- v61: Static configuration and Icon component =================
 // =============================================================================
 // This file contains:
 //   - Schema version and constants
@@ -85,17 +85,17 @@ const OPERATION_TYPES = [
   { id: "changeover_cleaning", label: "Changeover Cleaning", category: "atomic" },
   { id: "packaging", label: "Packaging", category: "atomic" },
   { id: "staging", label: "Staging", category: "atomic" },
+  { id: "hold", label: "Hold", category: "atomic" },
 ];
 
+// v61: Macro list trimmed to three core operations. Old macros (filter_cake_wash,
+// aqueous_wash, slurry_wash, ph_adjustment, recrystallization, react_until_completion)
+// removed. filter_and_wash replaces filter_cake_wash with an updated op sequence.
+// liquid_liquid_extraction updated to include the new hold op.
 const COMPOSITE_TYPES = [
-  { id: "filter_cake_wash", label: "Filter Cake Wash", category: "composite" },
-  { id: "liquid_liquid_extraction", label: "Liquid-Liquid Extraction", category: "composite" },
-  { id: "aqueous_wash", label: "Aqueous Wash", category: "composite" },
-  { id: "slurry_wash", label: "Slurry Wash (Transfer & Re-filter)", category: "composite" },
   { id: "solvent_swap", label: "Solvent Swap", category: "composite" },
-  { id: "ph_adjustment", label: "pH Adjustment", category: "composite" },
-  { id: "recrystallization", label: "Recrystallization", category: "composite" },
-  { id: "react_until_completion", label: "React Until Completion", category: "composite" },
+  { id: "filter_and_wash", label: "Filter & Wash", category: "composite" },
+  { id: "liquid_liquid_extraction", label: "Liquid-Liquid Extraction", category: "composite" },
 ];
 
 const OP_TYPE_COLORS = {
@@ -107,20 +107,19 @@ const OP_TYPE_COLORS = {
   loss: "#8a887e", inert_purge: "#6dada8",
   ipc_cleaning: "#5a9e8a", changeover_cleaning: "#3d7a6a",
   packaging: "#4a8fa0", staging: "#687895",
+  hold: "#8b7faa",
 };
 
 const COMPOSITE_COMPONENTS = {
-  filter_cake_wash: ["addition", "stir", "filtration", "loss"],
-  liquid_liquid_extraction: ["addition", "stir", "staging", "transfer"],
-  aqueous_wash: ["addition", "stir", "staging", "transfer", "loss"],
-  slurry_wash: ["addition", "transfer", "stir", "transfer", "filtration", "loss"],
+  // Solvent Swap: concentrate -> loss -> charge fresh solvent -> concentrate -> loss
   solvent_swap: ["distillation", "loss", "addition", "distillation", "loss"],
-  ph_adjustment: ["addition", "stir", "ipc"],
-  recrystallization: ["addition", "heat_cool", "stir", "ipc", "heat_cool", "stir", "transfer", "filtration", "loss"],
-  react_until_completion: ["stir", "ipc"],
+  // Filter & Wash: transfer slurry to filter -> filter -> addition of wash solvent -> transfer -> filter
+  filter_and_wash: ["transfer", "filtration", "addition", "transfer", "filtration"],
+  // Liquid-Liquid Extraction: addition -> stir -> hold phases -> transfer organic layer
+  liquid_liquid_extraction: ["addition", "stir", "hold", "transfer"],
 };
 
-const USER_SPECIFIED_DURATION_TYPES = new Set(["reaction", "stir", "drying", "loss"]);
+const USER_SPECIFIED_DURATION_TYPES = new Set(["reaction", "stir", "drying", "loss", "hold"]);
 
 const EQUIPMENT_TYPE_LABELS = {
   reactor: "Reactor", pressure_filter: "Pressure Filter",
@@ -266,10 +265,10 @@ function Icon({ name, size = 14, color }) {
 }
 
 
-// ---- models_v59.js ----
+// ---- models_v61.js ----
 
 // =============================================================================
-// === models.js -- v59: Core math, engines, and state management ==============
+// === models.js -- v61: Core math, engines, and state management ==============
 // =============================================================================
 // Depends on: data.js (constants must be loaded first)
 // This file contains:
@@ -1131,7 +1130,7 @@ function migrateProject(rawProject) {
       id: typeof c?.id === "string" ? c.id : genId("COP"),
       stepId: typeof c?.stepId === "string" ? c.stepId : null,
       sequence: Math.max(1, normalizeNumber(c?.sequence, 1)),
-      macroType: compTypeSet.has(c?.macroType) ? c.macroType : "filter_cake_wash",
+      macroType: compTypeSet.has(c?.macroType) ? c.macroType : "filter_and_wash",
       label: c?.label ?? "Composite Operation",
       operationIds: Array.isArray(c?.operationIds) ? c.operationIds.filter(id => typeof id === "string") : [],
       isExpanded: !!c?.isExpanded,
@@ -1176,6 +1175,17 @@ function migrateProject(rawProject) {
         if (normalized.type === "addition") {
           const stored = normalizePositiveNumber(o?.solidAdditionPctPerHour, null);
           normalized.solidAdditionPctPerHour = stored ?? legacySolidRate ?? null;
+        }
+        if (normalized.type === "distillation" || normalized.type === "drying") {
+          // v61: pressure field (mbar); null means ambient pressure (unspecified).
+          normalized.pressure = normalizeNumber(o?.pressure, null);
+        }
+        if (normalized.type === "transfer") {
+          // v61: allow consumable containers as transfer destination.
+          // v61: streamType labels the transferred layer for LLE (null | "aqueous" | "organic").
+          normalized.destinationConsumableId = typeof o?.destinationConsumableId === "string" ? o.destinationConsumableId : null;
+          const st = o?.streamType;
+          normalized.streamType = (st === "aqueous" || st === "organic") ? st : null;
         }
         if (normalized.type === "packaging") {
           const stored = normalizePositiveNumber(o?.packagingRateKgPerH, null);
@@ -2124,6 +2134,10 @@ function resolveDuration(op, project) {
         calculated: 6, unit: "h", formula: "Use standard fixed staging duration.",
         inputValues: "6 h", source: "Staging standard duration (SPEC sec.4)"
       };
+    case "hold":
+      // Duration is user-specified for hold operations; no auto-calc heuristic.
+      // The user sets op.duration manually (e.g. overnight hold = 14 h).
+      return null;
     case "packaging":
       {
         const massKg = amountToKg(op.amount ?? 0, op.unit, mat, compoundById, mat?.density ?? 1.0);
@@ -2805,12 +2819,22 @@ function computeGreenMetrics(project, massFlowResult) {
   // v46: uses material.isAqueous (set explicitly at creation or seeded from the
   // legacy name-based heuristic during migration). Falls back to false if not set.
   // The aqueous input mass is an upper bound on aqueous waste; the remainder is organic.
+  // v61: also counts transfer ops with streamType="aqueous" toward aqueous attribution.
+  // This improves LLE waste classification: the transferred aqueous layer mass
+  // is added to aqueousMassIn so the waste split reflects which layer was discarded.
   let aqueousMassIn = 0;
   for (const op of addOps) {
     const mat = project.materials.find(m => m.id === op.materialId);
     const kg = amountToKg(op.amount, op.unit, mat, compoundById, mat?.density ?? 1.0);
     if (kg <= 0) continue;
     if (mat?.isAqueous === true) aqueousMassIn += kg;
+  }
+  // Add explicit aqueous transfer ops to aqueous attribution.
+  for (const op of project.operations.filter(o => o.type === "transfer" && o.streamType === "aqueous")) {
+    const mat = op.materialId ? project.materials.find(m => m.id === op.materialId) : null;
+    const densityFb = mat?.density ?? 1.0;
+    const kg = amountToKg(op.amount, op.unit, mat, compoundById, densityFb);
+    if (kg > 0) aqueousMassIn += kg;
   }
   const aqueousWasteKg = Math.min(wasteKg, aqueousMassIn);
   const organicWasteKg = Math.max(0, wasteKg - aqueousWasteKg);
@@ -3196,10 +3220,10 @@ function buildProjectCsvSections(project, costResult, greenMetrics, massFlowResu
 }
 
 
-// ---- core_v59.js ----
+// ---- core_v61.js ----
 
 // =============================================================================
-// === core.js -- v59: Design tokens, formatters, shared atoms, process editor
+// === core.js -- v61: Design tokens, formatters, shared atoms, process editor
 // =============================================================================
 // Depends on: data.js, models.js (load those first)
 // Contains:
@@ -3712,6 +3736,39 @@ function TextField({ value, field, opId, dispatch, placeholder = "text" }) {
     inputType="text" onSave={v => dispatch(p => updateOperation(p, opId, { [field]: v }))} />;
 }
 
+// v61: Inline-editable pressure field for distillation and drying ops.
+// Stores value in mbar. When null shows placeholder "atm" (ambient/unspecified).
+function PressureField({ op, dispatch }) {
+  const isSet = op.pressure != null;
+  const display = isSet ? op.pressure : null;
+  const [editing, setEditing] = useState(false);
+  const [localVal, setLocalVal] = useState("");
+  const inputRef = useRef(null);
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  const commit = () => {
+    const n = parseFloat(localVal);
+    dispatch(p => updateOperation(p, op.id, { pressure: (Number.isFinite(n) && n >= 0) ? n : null }));
+    setEditing(false);
+  };
+  if (editing) {
+    return (
+      <input ref={inputRef} type="number" min="0" step="any" value={localVal}
+        onChange={e => setLocalVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+        placeholder="mbar"
+        style={{ width: "64px", fontFamily: MONO, fontSize: "13px", border: "none", borderBottom: `1.5px solid ${C.orange}`, background: "transparent", outline: "none", color: C.dark, padding: "0 2px", textAlign: "right" }} />
+    );
+  }
+  return (
+    <span title={isSet ? `Pressure: ${display} mbar (click to edit or clear)` : "Pressure: ambient (click to set vacuum or elevated pressure in mbar)"}
+      onClick={() => { setLocalVal(isSet ? String(op.pressure) : ""); setEditing(true); }}
+      style={{ fontFamily: MONO, fontSize: "13px", borderBottom: `1.5px solid ${isSet ? C.orange : C.blue}`, cursor: "text", padding: "0 2px", color: isSet ? C.dark : C.midDark, minWidth: "32px", display: "inline-block", textAlign: "right" }}>
+      {isSet ? display : "atm"}
+    </span>
+  );
+}
+
 function P({ children }) {
   return <span style={{ fontFamily: "inherit", fontSize: "13px", color: C.midDark }}>{children}</span>;
 }
@@ -3908,14 +3965,104 @@ function renderAddition(op, p, d) {
 }
 
 function renderTransfer(op, p, d) {
+  // Destination can be a vessel (equipment) or consumable container; stream type labels the layer for LLE.
+  // streamType (null | "aqueous" | "organic") labels which layer is being transferred,
+  // enabling accurate aqueous/organic waste attribution in green metrics.
+  const consumables = p.consumables || [];
+  const destIsConsumable = !!op.destinationConsumableId;
+  const destCon = consumables.find(c => c.id === op.destinationConsumableId) || null;
+  const selS = {
+    border: `1px solid ${C.border}`, borderRadius: "4px", padding: "2px 6px",
+    fontSize: "12px", fontFamily: "inherit", background: "#fff", color: C.dark, outline: "none", cursor: "pointer",
+  };
+
+  // Live volume-based units estimate for the consumable destination path.
+  let conUnitsEstimate = null;
+  if (destCon && destCon.capacityKg && op.amount && op.unit === "kg") {
+    conUnitsEstimate = Math.ceil(op.amount / destCon.capacityKg);
+  }
+
+  const streamType = op.streamType || null;
+  // Badge style for stream type indicator shown in the operation line.
+  const streamBadgeStyle = streamType
+    ? { fontSize: "10px", fontWeight: 600, letterSpacing: "0.03em", padding: "1px 6px", borderRadius: "3px",
+        color: streamType === "aqueous" ? C.blue : C.green,
+        background: streamType === "aqueous" ? C.blue + "18" : C.green + "18", flexShrink: 0 }
+    : null;
+
   return (
-    <div style={tw}>
-      <P>Transfer</P><NumField value={op.amount} field="amount" opId={op.id} dispatch={d} placeholder="volume" />
-      <UnitField value={op.unit} opId={op.id} dispatch={d} />
-      <P>from</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} />
-      <P>to</P><EquipField equipmentId={op.secondaryEquipmentId} project={p} dispatch={d} opId={op.id} fieldName="secondaryEquipmentId" />
-      <P>at</P><PumpRateField op={op} dispatch={d} /><P>L/h</P>
-      <P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} />
+    <div>
+      <div style={tw}>
+        <P>Transfer</P><NumField value={op.amount} field="amount" opId={op.id} dispatch={d} placeholder="volume" />
+        <UnitField value={op.unit} opId={op.id} dispatch={d} />
+        {streamBadgeStyle && <span style={streamBadgeStyle}>{streamType === "aqueous" ? "aq." : "org."}</span>}
+        <P>from</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} />
+        <P>to</P>
+        {!destIsConsumable
+          ? <EquipField equipmentId={op.secondaryEquipmentId} project={p} dispatch={d} opId={op.id} fieldName="secondaryEquipmentId" />
+          : <span style={{ fontFamily: MONO, fontSize: "13px", color: C.dark, borderBottom: `1.5px solid ${C.orange}`, padding: "0 2px" }}>{destCon?.name || "container"}</span>
+        }
+        <P>at</P><PumpRateField op={op} dispatch={d} /><P>L/h</P>
+        <P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} />
+      </div>
+      {/* Destination toggle and stream-type annotation row */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", paddingLeft: "2px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "11px", color: C.midDark, flexShrink: 0 }}>Destination:</span>
+        <select
+          value={destIsConsumable ? "consumable" : "equipment"}
+          onChange={ev => {
+            const toConsumable = ev.target.value === "consumable";
+            d(proj => ({
+              ...proj,
+              operations: proj.operations.map(o => o.id === op.id ? {
+                ...o,
+                secondaryEquipmentId: toConsumable ? null : o.secondaryEquipmentId,
+                destinationConsumableId: toConsumable ? (proj.consumables?.[0]?.id || null) : null,
+              } : o),
+              updatedAt: new Date().toISOString(),
+            }));
+          }}
+          style={selS}
+        >
+          <option value="equipment">Vessel / Equipment</option>
+          <option value="consumable">Container (drum/tote)</option>
+        </select>
+        {destIsConsumable && (
+          <select
+            value={op.destinationConsumableId || ""}
+            onChange={ev => d(proj => ({
+              ...proj,
+              operations: proj.operations.map(o => o.id === op.id ? { ...o, destinationConsumableId: ev.target.value || null } : o),
+              updatedAt: new Date().toISOString(),
+            }))}
+            style={selS}
+          >
+            <option value="">-- None --</option>
+            {consumables.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+        {destCon && (
+          <span style={{ fontSize: "11px", color: C.midDark, fontFamily: MONO }}>
+            {conUnitsEstimate != null ? `~${conUnitsEstimate} unit${conUnitsEstimate !== 1 ? "s" : ""} needed` : ""}
+            {" "}(@ {destCon.capacityKg} kg/unit{destCon.unitCost != null ? `, $${destCon.unitCost}/unit` : ""})
+          </span>
+        )}
+        {/* v61: Stream type selector for LLE -- labels the transferred layer for waste attribution */}
+        <span style={{ fontSize: "11px", color: C.midDark, flexShrink: 0, marginLeft: "8px" }}>Layer:</span>
+        <select
+          value={streamType || ""}
+          onChange={ev => d(proj => ({
+            ...proj,
+            operations: proj.operations.map(o => o.id === op.id ? { ...o, streamType: ev.target.value || null } : o),
+            updatedAt: new Date().toISOString(),
+          }))}
+          style={selS}
+        >
+          <option value="">-- unspecified --</option>
+          <option value="organic">Organic layer</option>
+          <option value="aqueous">Aqueous layer</option>
+        </select>
+      </div>
     </div>
   );
 }
@@ -3924,23 +4071,33 @@ function renderReaction(op, p, d) { return <div><div style={tw}><P>React in</P><
 function renderStir(op, p, d) { return <div style={tw}><P>Stir</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>for</P><DurationField op={op} dispatch={d} isAutoCalc={false} /><P>at</P><TempField value={op.temperature} opId={op.id} dispatch={d} tempUnit={p.settings?.temperatureUnit || "C"} /></div>; }
 function renderHeatCool(op, p, d) { return <div style={tw}><P>Adjust</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>to</P><TempField value={op.temperature} opId={op.id} dispatch={d} tempUnit={p.settings?.temperatureUnit || "C"} /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 function renderFiltration(op, p, d) { return <div style={tw}><P>Filter contents of</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>, filtrate to</P><EquipField equipmentId={op.secondaryEquipmentId} project={p} dispatch={d} opId={op.id} fieldName="secondaryEquipmentId" /><P>as</P><MatField materialId={op.materialId} project={p} dispatch={d} opId={op.id} placeholder="filtrate material" /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
-function renderDistillation(op, p, d) { return <div style={tw}><P>Distill</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} equipFilter={e => e.type !== "distillation_unit"} /><P>at</P><TempField value={op.temperature} opId={op.id} dispatch={d} tempUnit={p.settings?.temperatureUnit || "C"} /><P>, collecting</P><NumField value={op.amount} field="amount" opId={op.id} dispatch={d} placeholder="volume" /><UnitField value={op.unit} opId={op.id} dispatch={d} /><P>of</P><MatField materialId={op.materialId} project={p} dispatch={d} opId={op.id} placeholder="distillate" /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
-function renderDrying(op, p, d) { return <div style={tw}><P>Dry</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>at</P><TempField value={op.temperature} opId={op.id} dispatch={d} tempUnit={p.settings?.temperatureUnit || "C"} /><P>for</P><DurationField op={op} dispatch={d} isAutoCalc={false} /></div>; }
+function renderDistillation(op, p, d) { return <div style={tw}><P>Distill</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} equipFilter={e => e.type !== "distillation_unit"} /><P>at</P><TempField value={op.temperature} opId={op.id} dispatch={d} tempUnit={p.settings?.temperatureUnit || "C"} />{op.pressure != null && <><P>@</P><PressureField op={op} dispatch={d} /><P>mbar</P></>}{op.pressure == null && <><P>(</P><PressureField op={op} dispatch={d} /><P>)</P></>}<P>, collecting</P><NumField value={op.amount} field="amount" opId={op.id} dispatch={d} placeholder="volume" /><UnitField value={op.unit} opId={op.id} dispatch={d} /><P>of</P><MatField materialId={op.materialId} project={p} dispatch={d} opId={op.id} placeholder="distillate" /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
+function renderDrying(op, p, d) { return <div style={tw}><P>Dry</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>at</P><TempField value={op.temperature} opId={op.id} dispatch={d} tempUnit={p.settings?.temperatureUnit || "C"} />{op.pressure != null && <><P>@</P><PressureField op={op} dispatch={d} /><P>mbar</P></>}{op.pressure == null && <><P>(</P><PressureField op={op} dispatch={d} /><P>)</P></>}<P>for</P><DurationField op={op} dispatch={d} isAutoCalc={false} /></div>; }
 function renderIpc(op, p, d) { return <div style={tw}><P>Sample from</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>for IPC:</P><TextField value={op.ipcMethod} field="ipcMethod" opId={op.id} dispatch={d} placeholder="method" /><P>&middot;</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 function renderReleaseTesting(op, p, d) { return <div style={tw}><P>Release test from</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>:</P><TextField value={op.ipcMethod} field="ipcMethod" opId={op.id} dispatch={d} placeholder="method" /><P>&middot;</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 function renderLoss(op, p, d) { return <div><div style={tw}><P>Account for a loss of</P><NumField value={op.amount} field="amount" opId={op.id} dispatch={d} /><UnitField value={op.unit} opId={op.id} dispatch={d} /><P>from</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>:</P><TextField value={op.notes} field="notes" opId={op.id} dispatch={d} placeholder="description" /></div><LossCompositionEditor op={op} project={p} dispatch={d} /></div>; }
 function renderInertPurge(op, p, d) { return <div style={tw}><P>Inert</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>with nitrogen for</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 function renderIpcCleaning(op, p, d) { return <div style={tw}><P>Clean</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>per</P><TextField value={op.notes} field="notes" opId={op.id} dispatch={d} placeholder="SOP" /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
 function renderChangeoverCleaning(op, p, d) { return <div style={tw}><P>Changeover clean</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>per</P><TextField value={op.notes} field="notes" opId={op.id} dispatch={d} placeholder="SOP" /><P>over</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
-function renderPackaging(op, p, d) {
-  // Consumable selector: populated from project.consumables; shows unit count estimate when selected.
+// v61: PackagingRenderer is a component (not a plain function) so it can read SimContext.
+// The units-needed estimate now uses costResult.consumableUsage from the sim engine, which
+// applies correct kg conversion (amountToKg) for any unit. Falls back to a simpler direct
+// estimate when mass flow hasn't run yet or the op has no consumable linked.
+function PackagingRenderer({ op, project: p, dispatch: d }) {
+  const { costResult } = useContext(SimContext);
   const consumables = p.consumables || [];
   const selCon = consumables.find(c => c.id === op.consumableId) || null;
 
-  // Compute units needed estimate from current op amount (live, no mass flow needed for packaging kg)
+  // Prefer engine-computed units from consumableUsage (handles any unit via amountToKg).
+  // Fall back to direct kg estimate when engine result isn't available.
   let unitsEstimate = null;
-  if (selCon && selCon.capacityKg && op.amount && op.unit === "kg") {
-    unitsEstimate = Math.ceil(op.amount / selCon.capacityKg);
+  if (selCon) {
+    const engineEntry = (costResult?.consumableUsage || []).find(e => e.opId === op.id);
+    if (engineEntry?.unitsNeeded != null) {
+      unitsEstimate = engineEntry.unitsNeeded;
+    } else if (selCon.capacityKg && op.amount && op.unit === "kg") {
+      unitsEstimate = Math.ceil(op.amount / selCon.capacityKg);
+    }
   }
 
   const selS = {
@@ -3992,6 +4149,9 @@ function renderPackaging(op, p, d) {
   );
 }
 function renderStaging(op, p, d) { return <div style={tw}><P>Stage</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>for</P><DurationField op={op} dispatch={d} isAutoCalc={true} /></div>; }
+// v61: Hold operation -- equipment holds at temperature for a user-specified time.
+// Notes/reason field always shown as an editable text field (e.g. "phase separation", "overnight").
+function renderHold(op, p, d) { return <div style={tw}><P>Hold</P><EquipField equipmentId={op.primaryEquipmentId} project={p} dispatch={d} opId={op.id} /><P>at</P><TempField value={op.temperature} opId={op.id} dispatch={d} tempUnit={p.settings?.temperatureUnit || "C"} /><P>for</P><DurationField op={op} dispatch={d} isAutoCalc={false} /><P>&middot;</P><TextField value={op.notes} field="notes" opId={op.id} dispatch={d} placeholder="reason / notes" /></div>; }
 
 function renderOperationTemplate(op, project, dispatch) {
   switch (op.type) {
@@ -4009,8 +4169,9 @@ function renderOperationTemplate(op, project, dispatch) {
     case "inert_purge": return renderInertPurge(op, project, dispatch);
     case "ipc_cleaning": return renderIpcCleaning(op, project, dispatch);
     case "changeover_cleaning": return renderChangeoverCleaning(op, project, dispatch);
-    case "packaging": return renderPackaging(op, project, dispatch);
+    case "packaging": return <PackagingRenderer op={op} project={project} dispatch={dispatch} />;
     case "staging": return renderStaging(op, project, dispatch);
+    case "hold": return renderHold(op, project, dispatch);
     default: return <P>{op.type}</P>;
   }
 }
@@ -4953,10 +5114,10 @@ function SummaryBar({ project }) {
   );
 }
 
-// ---- pfd_v59.js ----
+// ---- pfd_v61.js ----
 
 // =============================================================================
-// === pfd.js -- v59: Process Flow Diagram components (React Flow)
+// === pfd.js -- v61: Process Flow Diagram components (React Flow)
 // =============================================================================
 // Depends on: data.js, models.js, core.js (load all before this file)
 // Contains:
@@ -5773,10 +5934,10 @@ function PfdTab({ project, dispatch }) {
   );
 }
 
-// ---- tabs_v59.js ----
+// ---- tabs_v61.js ----
 
 // =============================================================================
-// === tabs.js -- v59: Tab view components and root App
+// === tabs.js -- v61: Tab view components and root App
 // =============================================================================
 // Depends on: data.js, models.js, core.js, pfd.js (load all before this file)
 // Contains:
@@ -7198,7 +7359,7 @@ function GanttTab({ project }) {
               addition: "ADD", transfer: "XFR", reaction: "RXN", stir: "STR", heat_cool: "H/C",
               filtration: "FILT", distillation: "DIST", drying: "DRY", ipc: "IPC",
               release_testing: "REL", loss: "LOSS", inert_purge: "PURGE",
-              ipc_cleaning: "CLN", changeover_cleaning: "C/O", packaging: "PKG", staging: "STAGE",
+              ipc_cleaning: "CLN", changeover_cleaning: "C/O", packaging: "PKG", staging: "STAGE", hold: "HOLD",
             };
             const label = isQcSuffix ? "QC" : (abbrevMap[opType] ?? opType.toUpperCase());
             const durationH = sop.endTime - sop.startTime;
